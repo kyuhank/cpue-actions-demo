@@ -22,3 +22,5 @@ The seeded generator includes a long-term abundance change, correlated annual av
 All data and results are synthetic examples, with no management interpretation.
 
 The presentation uses one GitHub runner and one Docker container. New data run all eleven stages; a CPUE filter change runs six, and one M change runs three. Unchanged outputs are reused only when data, code, container, stage settings and parent fingerprints match, with file checksums verified. Each executed stage includes a four-second presentation pause; computation time is recorded separately. `parallel-pipeline.yml` retains the separate-job example. Protected-data production would use approved HPC.
+
+Optional hosted data: [Supabase Free setup](supabase/README.md). The GitHub-data demo remains active until a project is configured.

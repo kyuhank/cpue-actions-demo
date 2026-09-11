@@ -30,9 +30,9 @@ Deno.test('Stage updates write only the disposable branch and fixed config; no m
  }finally{globalThis.fetch=original;Deno.env.delete('WORKSHOP_GITHUB_TOKEN');}
 });
 
-Deno.test('Server cleanup waits ten minutes, removes only demo runs and branch, then resets the data',async()=>{
+Deno.test('Server cleanup waits ten minutes and resumes after partial cleanup without deleting a missing branch',async()=>{
  const original=globalThis.fetch,clock=Date.now,initial=clock(),calls:any[]=[];
- let now=initial,deleted=false,finished=false;
+ let now=initial,deleted=false,finished=false,branchExists=true,failFinish=true;
  let demo:any={phase:'active',run_id:101,reset_at:null};
  const run={id:101,run_attempt:1,run_number:1,head_sha:'a'.repeat(40),head_branch:DEMO_BRANCH,
   status:'completed',conclusion:'success',display_title:'Database version 2024',path:'.github/workflows/update.yml',
@@ -48,19 +48,22 @@ Deno.test('Server cleanup waits ten minutes, removes only demo runs and branch, 
    if(rpc==='workshop_state')return Response.json({last_request:null});
    if(rpc==='workshop_demo_observe'){demo={phase:'active',run_id:body.p_run,reset_at:new Date(Date.parse(body.p_completed)+600000).toISOString()};return Response.json(null);}
    if(rpc==='workshop_demo_claim_reset'){assert(now>=Date.parse(demo.reset_at));demo.phase='cleaning';return Response.json(true);}
-   if(rpc==='workshop_demo_finish_reset'){assert(deleted);finished=true;demo.phase='idle';return Response.json(null);}
+   if(rpc==='workshop_demo_finish_reset'){assert(deleted);if(failFinish){failFinish=false;return Response.json({error:'Temporary database failure'},{status:500});}finished=true;demo.phase='idle';return Response.json(null);}
    throw Error('Unexpected RPC');
   }
   assert(url.startsWith('https://api.github.com/repos/'+REPO+'/'));
   if(url.includes('/actions/workflows/update.yml/runs?'))return Response.json({workflow_runs:deleted?[]:[run]});
   if(url.includes('/attempts/1/jobs?'))return Response.json({jobs:[]});
   if(url.endsWith('/actions/runs/101')&&method==='DELETE'){deleted=true;return new Response(null,{status:204});}
-  if(url.endsWith('/git/refs/heads/'+DEMO_BRANCH)&&method==='DELETE')return new Response(null,{status:204});
+  if(url.endsWith('/git/ref/heads/'+DEMO_BRANCH))return branchExists?Response.json({object:{sha:'a'.repeat(40)}}):new Response(null,{status:404});
+  if(url.endsWith('/git/refs/heads/'+DEMO_BRANCH)&&method==='DELETE'){assert(branchExists);branchExists=false;return new Response(null,{status:204});}
   throw Error('Unexpected GitHub request');
  };
  try{
   assert(!(await maintain()).reset);assert(!deleted&&!finished);
   now+=1000;
+  let failed=false;try{await maintain();}catch{failed=true;}
+  assert(failed&&deleted&&!branchExists&&!finished);
   assert((await maintain()).reset);assert(deleted&&finished);
   assert(calls.filter(x=>x.method==='DELETE').length===2);
  }finally{globalThis.fetch=original;Date.now=clock;Deno.env.delete('SUPABASE_URL');Deno.env.delete('SUPABASE_SERVICE_ROLE_KEY');}

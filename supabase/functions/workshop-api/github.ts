@@ -62,7 +62,8 @@ export async function removeDemonstrationRuns(upToRun:number){
  }
  const remaining=(await json('actions/workflows/update.yml/runs?per_page=1')).workflow_runs;
  if(remaining.length)throw Error('More demonstration records remain; cleanup will resume.');
- await github('git/refs/heads/'+DEMO_BRANCH,'DELETE',undefined,true);
+ const branch=await github('git/ref/heads/'+DEMO_BRANCH,'GET',undefined,true);
+ if(branch.ok)await github('git/refs/heads/'+DEMO_BRANCH,'DELETE',undefined,true);
 }
 async function download(response:Response,limit:number):Promise<Uint8Array>{
  let r=response;if(r.status===302){const url=new URL(r.headers.get('location')||'');if(url.protocol!=='https:'||!(/(^|\.)(githubusercontent\.com|blob\.core\.windows\.net)$/.test(url.hostname)))throw Error('Unknown GitHub download host.');r=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(20000)});}

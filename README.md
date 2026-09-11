@@ -1,33 +1,16 @@
-# A data update → CPUE → assessment → report
+# CPUE workflow demo
 
-A small, public teaching demonstration using **entirely synthetic data**. A push
-that changes `data/` triggers four real GitHub Actions jobs:
+A synthetic-data example: extraction → CPUE → toy assessment → Quarto report.
 
-```mermaid
-flowchart LR
-  D[(Synthetic SQLite database)] --> E[01 Extract]
-  E --> C[02 CPUE]
-  C --> A[03 Assessment]
-  A --> R[04 Quarto report]
-```
+[cpue-toy-data](https://github.com/kyuhank/cpue-toy-data) calls this repository’s
+reusable workflow when new data are committed. Four dependent jobs run on
+GitHub-hosted Ubuntu runners; each passes its outputs to the next.
 
-Each job waits for its declared parent (`needs`) and downloads that parent's
-artifact. Failures stop downstream execution. The final artifact contains an
-HTML report, CSV results, diagnostics, runtime records and checksums.
+The CPUE models compare year + vessel and year only. Each index feeds a simple
+Schaefer model. All data are synthetic; results are for demonstration only.
+Kflow2 code is kept separately and privately.
 
-The CPUE comparison fits year + vessel and year-only Poisson models on the same
-set records. A deterministic Schaefer model then fits each index with total
-removals. This is a deliberately tiny teaching model, **not a tuna stock
-assessment or management advice**. Its assumptions are documented in the report
-and `pipeline/choices.json`.
-
-No confidential data, institutional credentials, private proposal documents or
-company compute services are used. Computation runs on standard GitHub-hosted
-Ubuntu runners. The presentation is maintained separately in a private repository.
-
-## Run locally
-
-Requires Python 3.10+, base R and Quarto 1.7.31. No extra R packages are needed.
+To run locally with Python, base R and Quarto:
 
 ```bash
 python3 pipeline/extract.py
@@ -36,29 +19,4 @@ Rscript pipeline/assessment.R
 python3 pipeline/report.py
 ```
 
-Open `outputs/report.html`. The GitHub workflow fixes R 4.5.1 and Quarto 1.7.31,
-pins action source commits, and records the runner image and input/code identity.
-GitHub-hosted runner images still change; numerical repeatability must be checked
-within an agreed tolerance rather than assumed to be bitwise identical.
-
-## Trigger a data update
-
-```bash
-python3 pipeline/make_data.py --append
-git add data/toy-fishery.sqlite
-git commit -m "Add one synthetic year"
-git push
-```
-
-Only the synthetic database changes. GitHub's `push` event automatically starts
-the chain. `workflow_dispatch` can rerun the existing snapshot without adding data.
-In an institutional workflow, the equivalent event would be an approved,
-validated database snapshot becoming available inside its authorized environment.
-
-## Watch in local Kflow2
-
-A separate **private local presentation copy** can display the real GitHub
-Actions status, dependencies, completed logs and artifacts. GitHub Actions owns
-execution and dependency scheduling; Kflow2 supplies the monitoring view.
-Kflow2 source and its connector are not distributed in this public repository.
-The public workflow is fully runnable without Kflow2.
+Open `outputs/report.html`. GitHub uses R 4.5.1 and Quarto 1.7.31.

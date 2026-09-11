@@ -161,7 +161,7 @@ jobs:
           if-no-files-found: error
 
   assessment_vessel_ref:
-    name: '04 Assessment: vessel, r=0.35'
+    name: '04 Assessment: vessel, lower M (0.20)'
     needs: prepare_vessel
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -186,8 +186,8 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-  assessment_vessel_high_r:
-    name: '04 Assessment: vessel, r=0.45'
+  assessment_vessel_high_m:
+    name: '04 Assessment: vessel, higher M (0.30)'
     needs: prepare_vessel
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -204,16 +204,16 @@ jobs:
       - name: Fit this assessment case
         run: sh scripts/container-stage.sh assessment
         env:
-          TOY_ASSESSMENT_CASE: assessment_vessel_high_r
+          TOY_ASSESSMENT_CASE: assessment_vessel_high_m
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: assessment_vessel_high_r-${{ github.run_attempt }}
+          name: assessment_vessel_high_m-${{ github.run_attempt }}
           path: outputs/
           retention-days: 30
           if-no-files-found: error
 
   assessment_year_ref:
-    name: '04 Assessment: year, r=0.35'
+    name: '04 Assessment: year, lower M (0.20)'
     needs: prepare_year
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -238,8 +238,8 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-  assessment_year_high_r:
-    name: '04 Assessment: year, r=0.45'
+  assessment_year_high_m:
+    name: '04 Assessment: year, higher M (0.30)'
     needs: prepare_year
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -256,17 +256,17 @@ jobs:
       - name: Fit this assessment case
         run: sh scripts/container-stage.sh assessment
         env:
-          TOY_ASSESSMENT_CASE: assessment_year_high_r
+          TOY_ASSESSMENT_CASE: assessment_year_high_m
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: assessment_year_high_r-${{ github.run_attempt }}
+          name: assessment_year_high_m-${{ github.run_attempt }}
           path: outputs/
           retention-days: 30
           if-no-files-found: error
 
   report:
     name: 05 Report
-    needs: [assessment_vessel_ref, assessment_vessel_high_r, assessment_year_ref, assessment_year_high_r]
+    needs: [assessment_vessel_ref, assessment_vessel_high_m, assessment_year_ref, assessment_year_high_m]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -281,16 +281,16 @@ jobs:
           path: inputs/assessment_vessel_ref/
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: assessment_vessel_high_r-${{ github.run_attempt }}
-          path: inputs/assessment_vessel_high_r/
+          name: assessment_vessel_high_m-${{ github.run_attempt }}
+          path: inputs/assessment_vessel_high_m/
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: assessment_year_ref-${{ github.run_attempt }}
           path: inputs/assessment_year_ref/
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: assessment_year_high_r-${{ github.run_attempt }}
-          path: inputs/assessment_year_high_r/
+          name: assessment_year_high_m-${{ github.run_attempt }}
+          path: inputs/assessment_year_high_m/
       - name: Collect results and render comparisons
         run: sh scripts/container-stage.sh report
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -299,4 +299,3 @@ jobs:
           path: outputs/
           retention-days: 30
           if-no-files-found: error
-

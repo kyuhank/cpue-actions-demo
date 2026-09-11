@@ -32,7 +32,7 @@ if any(folder.exists() for folder in folders):
         result = list(csv.DictReader((folder / 'summary.csv').open()))
         trajectory = list(csv.DictReader((folder / 'biomass.csv').open()))
         if (len(result) != 1 or result[0]['scenario'] != key or result[0]['choice'] != choice
-                or float(result[0]['r']) != case['r'] or not trajectory
+                or float(result[0]['M']) != case['M'] or not trajectory
                 or {row['scenario'] for row in trajectory} != {key}):
             raise SystemExit('Assessment output does not match its declared case')
         if choice in selected:

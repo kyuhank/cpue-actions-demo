@@ -1,3 +1,4 @@
+# Legacy Schaefer reference; the current workflow runs assessment.py (age-structured).
 # A minimal fitted biomass-dynamics model, deliberately much smaller than MFCL.
 # B[t+1] = B[t] + r B[t] (1 - B[t]/K) - C[t]; I[t] = q B[t].
 # r = 0.35 and initial B/K = 1 are fixed; K and q are fitted by log-index SSE.

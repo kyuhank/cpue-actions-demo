@@ -1,4 +1,4 @@
-"""Fit the same small Schaefer model as the reference R implementation."""
+"""Fit four illustrative age-structured cases to prepared annual catch and CPUE."""
 import csv
 import math
 from pathlib import Path
@@ -25,57 +25,35 @@ if requested:
 if not {case['choice'] for case in cases} <= {row['choice'] for row in indices}:
     raise SystemExit('The prepared input does not supply the requested CPUE choice')
 
-def trajectory(K):
-    B = [K]
-    for row in removals[:-1]:
-        value = B[-1] + r * B[-1] * (1 - B[-1] / K) - float(row['catch_t'])
-        if not math.isfinite(value) or value <= 0:
-            return None
-        B.append(value)
-    return B
-
-def minimum(function, lo, hi):
-    ratio = (math.sqrt(5) - 1) / 2
-    a, b = hi - ratio * (hi - lo), lo + ratio * (hi - lo)
-    fa, fb = function(a), function(b)
-    for _ in range(160):
-        if hi - lo < 1e-10:
-            break
-        if fa < fb:
-            hi, b, fb = b, a, fa
-            a = hi - ratio * (hi - lo); fa = function(a)
-        else:
-            lo, a, fa = a, b, fb
-            b = lo + ratio * (hi - lo); fb = function(b)
-    return (lo + hi) / 2
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from age_model import fit, AGES, WEIGHT, SELECTIVITY, MATURITY
 
 summary, series = [], []
 for case in cases:
-    choice, setting, scenario, r = case['choice'], case['setting'], case['key'], case['r']
+    choice, setting, scenario, mortality = case['choice'], case['setting'], case['key'], case['M']
     data = sorted((x for x in indices if x['choice'] == choice), key=lambda x: int(x['year']))
-    removals = data
-    logs = [math.log(float(x['index'])) for x in data]
-    def objective(logK):
-        B = trajectory(math.exp(logK))
-        if B is None:
-            return 1e12
-        logq = sum(i - math.log(b) for i, b in zip(logs, B)) / len(B)
-        return sum((i - logq - math.log(b)) ** 2 for i, b in zip(logs, B))
-    logK = minimum(objective, math.log(6000), math.log(100000))
-    K = math.exp(logK); B = trajectory(K)
-    if B is None or objective(logK) >= 1e11:
-        raise SystemExit('Toy biomass fit failed')
-    q = math.exp(sum(i - math.log(b) for i, b in zip(logs, B)) / len(B))
-    summary.append([choice, setting, scenario, data[-1]['year'], K, q, r, float(data[-1]['index']), B[-1] / K, objective(logK), K < 6001 or K > 99990])
-    series.extend([x['year'], choice, setting, scenario, b, b / K, x['index'], q * b] for x, b in zip(data, B))
+    result = fit([float(x['index']) for x in data], [float(x['catch_t']) for x in data], mortality)
+    summary.append([choice, setting, scenario, data[-1]['year'], result['R0'], result['B0'], result['SB0'],
+                    result['q'], mortality, float(data[-1]['index']), result['rows'][-1]['SB_over_SB0'],
+                    result['log_index_SSE'], result['boundary_fit']])
+    series.extend([x['year'], choice, setting, scenario, row['biomass'], row['spawning_biomass'],
+                   row['SB_over_SB0'], row['F'], x['index'], result['q'] * row['vulnerable_biomass']]
+                  for x, row in zip(data, result['rows']))
 for name, header, data in [
-    ('summary.csv', ['choice','setting','scenario','year','K','q','r','final_index','final_B_over_K','log_index_SSE','boundary_fit'], summary),
-    ('biomass.csv', ['year','choice','setting','scenario','biomass','B_over_K','observed_index','fitted_index'], series),
+    ('summary.csv', ['choice','setting','scenario','year','R0','B0','SB0','q','M','final_index','final_SB_over_SB0','log_index_SSE','boundary_fit'], summary),
+    ('biomass.csv', ['year','choice','setting','scenario','biomass','spawning_biomass','SB_over_SB0','F','observed_index','fitted_index'], series),
 ]:
     with (OUT / name).open('w', newline='') as f:
         w = csv.writer(f); w.writerow(header); w.writerows(data)
-(OUT / 'assessment-session.txt').write_text(f'Python {platform.python_version()}; standard library only; bounded golden-section optimisation\n')
-print(f'ASSESSMENT complete: {len(cases)} Schaefer fit(s); recorded growth settings; no uncertainty propagation')
+manifest['assessment_biology'] = {'ages': AGES, 'plus_group': 10, 'weight_t': WEIGHT,
+    'selectivity': SELECTIVITY, 'maturity': MATURITY, 'M_units': 'per year',
+    'recruitment': 'constant fitted R0', 'initial_state': 'unfished equilibrium',
+    'catch_equation': 'Baranov; solve annual F to match removals',
+    'index': 'q times beginning-year vulnerable biomass',
+    'scope': 'illustrative values; no age compositions, recruitment deviations or uncertainty propagation'}
+(OUT / 'assessment-session.txt').write_text(f'Python {platform.python_version()}; standard library only; coarse bracket and bounded golden-section optimisation\n')
+print(f'ASSESSMENT complete: {len(cases)} age-structured fit(s); recorded natural mortality assumptions; no uncertainty propagation')
 
 job = os.getenv('GITHUB_JOB', requested or 'assessment')
 manifest.setdefault('stage_compute_seconds', {})[job] = time.perf_counter() - started

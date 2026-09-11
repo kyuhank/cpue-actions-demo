@@ -16,6 +16,6 @@ python3 run.py
 ```
 
 Open `outputs/report.html` for data checks, fitted results, diagnostics and provenance.
-Python standard library only; reference R fits are retained for comparison.
+Python standard library only. The annual age-structured toy fits recruitment and catchability under two illustrative M assumptions (0.20 / 0.30 per year). Fixed biology, catch checks and model limitations are recorded in the report.
 The small runtime image is built in [ofp-sam-docker-images](https://github.com/PacificCommunity/ofp-sam-docker-images/tree/main/cpue-workshop).
 All data and results are synthetic examples, with no management interpretation.

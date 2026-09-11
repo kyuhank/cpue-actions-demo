@@ -1,6 +1,6 @@
 # Supabase Free setup
 
-Prepared for a new project; this connection is inactive until configured.
+The demonstration uses a Free Supabase project in Sydney. [Release 2024 completed the full workflow](https://github.com/kyuhank/cpue-toy-data/actions/runs/34645434946).
 
 The private presentation host has a setup command that checks the Free plan, creates the project and installs these files. This public directory contains only synthetic data and the database contract.
 

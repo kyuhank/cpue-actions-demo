@@ -25,7 +25,10 @@ assert.equal(calls[1].url,'https://workshop-test.trycloudflare.com/api/database-
 assert.equal(calls[1].options.headers['X-Workshop-Relay'],'test-relay');
 assert.deepEqual(JSON.parse(calls[1].options.body),{version:2024});
 assert.equal(calls[1].options.redirect,'error');
-for (const url of ['https://attacker.example','http://workshop-test.trycloudflare.com','https://workshop-test.trycloudflare.com@attacker.example','https://api.trycloudflare.com']) {
+pointer.url='https://7abfebd0c51ca7.lhr.life';calls=[];
+assert.equal((await handle(request())).status,202);
+assert.equal(calls[1].url,'https://7abfebd0c51ca7.lhr.life/api/database-release');
+for (const url of ['https://attacker.example','http://workshop-test.trycloudflare.com','https://workshop-test.trycloudflare.com@attacker.example','https://api.trycloudflare.com','https://7abfebd0c51ca7.lhr.life.attacker.example','https://7abfebd0c51ca7.lhr.life@attacker.example']) {
   pointer.url=url;calls=[];
   assert.equal((await handle(request())).status,503);
   assert.equal(calls.length,1);

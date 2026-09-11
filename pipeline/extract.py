@@ -16,11 +16,12 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT = Path.cwd() / "outputs"
 OUT.mkdir(exist_ok=True)
 source = ROOT / os.getenv("TOY_SOURCE_DATABASE", "data/toy-fishery.sqlite")
-query = (ROOT / "pipeline/extract.sql").read_text()
+queries = {name: (ROOT / 'pipeline' / name).read_text() for name in ('extract.sql', 'extract-catch.sql')}
+query = queries['extract.sql']
 with sqlite3.connect(source.as_uri() + "?mode=ro", uri=True) as db:
     input_rows = db.execute("SELECT COUNT(*) FROM sets").fetchone()[0]
     rows = db.execute(query).fetchall()
-    catches = db.execute("SELECT year, catch_t FROM removals ORDER BY year").fetchall()
+    catches = db.execute(queries['extract-catch.sql']).fetchall()
 if not rows or len({r[0] for r in rows}) != len(rows):
     raise SystemExit("Extraction failed: no rows or duplicated set identifiers")
 if any(r[3] <= 0 or r[4] < 0 for r in rows):
@@ -35,6 +36,8 @@ for name, header, values in [
         writer = csv.writer(f)
         writer.writerow(header)
         writer.writerows(values)
+for name, sql in queries.items():
+    (OUT / name).write_text(sql)
 def revision(folder, override):
     if os.getenv(override):
         return os.environ[override]
@@ -50,6 +53,8 @@ manifest = {
     "physical_github_job": os.getenv("TOY_GITHUB_JOB", "per-stage jobs"),
     "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
     "query_sha256": hashlib.sha256(query.encode()).hexdigest(),
+    "extraction_queries": {name: hashlib.sha256(sql.encode()).hexdigest() for name, sql in queries.items()},
+    "code_repository": "kyuhank/cpue-actions-demo",
     "git_commit": commit,
     "source_repository": "Supabase synthetic database" if os.getenv("TOY_SOURCE_PROVIDER") == "supabase" else os.getenv("TOY_DATA_REPOSITORY", "kyuhank/cpue-actions-demo"),
     "source_provider": os.getenv("TOY_SOURCE_PROVIDER", "github"),
@@ -62,7 +67,7 @@ manifest = {
     "container_image": os.getenv("TOY_CONTAINER_IMAGE", "none; native Python"),
     "runner_image": os.getenv("ImageVersion", "local"),
     "rows": len(rows), "first_year": min(r[1] for r in rows), "last_year": max(r[1] for r in rows),
-    "extraction_outputs": {name: hashlib.sha256((OUT / name).read_bytes()).hexdigest() for name in ('sets.csv', 'catch.csv')},
+    "extraction_outputs": {name: hashlib.sha256((OUT / name).read_bytes()).hexdigest() for name in ('sets.csv', 'catch.csv', *queries)},
     "extraction": {"input_rows": input_rows, "retained_rows": len(rows),
         "excluded_rows": input_rows - len(rows), "vessels": len({r[2] for r in rows}),
         "zero_catch_sets": sum(r[4] == 0 for r in rows), "total_hooks": sum(r[3] for r in rows),

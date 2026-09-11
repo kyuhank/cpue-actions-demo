@@ -21,7 +21,7 @@ export async function handle(request: Request) {
     if (!pointer.ok) throw new Error();
     const session = await pointer.json();
     if (session.active !== true || !(Date.parse(session.expires) > Date.now()) ||
-        !/^https:\/\/[a-z0-9]+(?:-[a-z0-9]+)+\.trycloudflare\.com$/.test(session.url))
+        !/^https:\/\/(?:[a-z0-9]+(?:-[a-z0-9]+)+\.trycloudflare\.com|[a-f0-9]{10,32}\.lhr\.life)$/.test(session.url))
       return new Response("Open the workshop sharing session before updating the database", { status: 503 });
     const result = await fetch(session.url + "/api/database-release", {
       method: "POST", redirect: "error", signal: AbortSignal.timeout(45000),

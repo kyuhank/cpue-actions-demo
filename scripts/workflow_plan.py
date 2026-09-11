@@ -31,7 +31,7 @@ def hashes(folder):
 def fingerprints():
     config = stage_settings()
     source = ROOT / os.getenv('TOY_SOURCE_DATABASE', 'data/toy-fishery.sqlite')
-    code = os.getenv('TOY_CODE_COMMIT') or digest(b''.join(p.read_bytes() for folder in ('scripts', 'pipeline') for p in sorted((ROOT / folder).glob('*.py'))))
+    code = os.getenv('TOY_CODE_COMMIT') or digest(b''.join(str(p.relative_to(ROOT)).encode() + b'\0' + p.read_bytes() for folder in ('scripts', 'pipeline') for p in sorted((ROOT / folder).iterdir()) if p.suffix in ('.py', '.sql', '.json')))
     result = {}
     for key, parents in PARENTS.items():
         inputs = {'code': code, 'image': os.getenv('TOY_CONTAINER_IMAGE', 'local'),

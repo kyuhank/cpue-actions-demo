@@ -1,23 +1,20 @@
 # CPUE workflow demo
 
-A synthetic-data example: extraction → CPUE → toy assessment → HTML report.
+Synthetic longline records → extraction → two CPUE choices → toy Schaefer fits → report.
 
-[cpue-toy-data](https://github.com/kyuhank/cpue-toy-data) calls this repository’s
-reusable workflow when new data are committed. Four dependent jobs run on
-GitHub-hosted Ubuntu runners; each passes its outputs to the next.
+[Open the workshop demo](https://kyuhank.github.io/cpue-actions-demo/).
+During a hosted session, visitors can start the real GitHub workflow without an account.
+The browser companion also runs the calculations locally.
 
-The CPUE models compare year + vessel and year only. Each index feeds a simple
-Schaefer model. All data are synthetic; results are for demonstration only.
-Kflow2 code is kept separately and privately.
-
-To run locally with Python (standard library only):
+New data in [cpue-toy-data](https://github.com/kyuhank/cpue-toy-data) trigger
+four dependent GitHub jobs using this repository’s pinned workflow.
+Kflow2 is a separate private orchestration app; its source is not included here.
 
 ```bash
-python3 pipeline/extract.py
-python3 pipeline/cpue.py
-python3 pipeline/assessment.py
-python3 pipeline/report.py
+python3 run.py
 ```
 
-Open `outputs/report.html`. Reference R fits are retained for comparison.
-The GitHub jobs need no additional software installation.
+Open `outputs/report.html` for data checks, fitted results, diagnostics and provenance.
+Python standard library only; reference R fits are retained for comparison.
+The small runtime image is built in [ofp-sam-docker-images](https://github.com/PacificCommunity/ofp-sam-docker-images/tree/main/cpue-workshop).
+All data and results are synthetic examples, with no management interpretation.

@@ -8,6 +8,7 @@ import platform
 import sqlite3
 import subprocess
 import time
+import shutil
 
 started = time.perf_counter()
 
@@ -50,8 +51,10 @@ manifest = {
     "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
     "query_sha256": hashlib.sha256(query.encode()).hexdigest(),
     "git_commit": commit,
-    "source_repository": os.getenv("TOY_DATA_REPOSITORY", "kyuhank/cpue-actions-demo"),
-    "source_git_commit": revision(source.parent.parent, "TOY_DATA_COMMIT"),
+    "source_repository": "Supabase synthetic database" if os.getenv("TOY_SOURCE_PROVIDER") == "supabase" else os.getenv("TOY_DATA_REPOSITORY", "kyuhank/cpue-actions-demo"),
+    "source_provider": os.getenv("TOY_SOURCE_PROVIDER", "github"),
+    "source_version": os.getenv("TOY_SOURCE_VERSION", ""),
+    "source_git_commit": None if os.getenv("TOY_SOURCE_PROVIDER") == "supabase" else revision(source.parent.parent, "TOY_DATA_COMMIT"),
     "github_run_id": os.getenv("GITHUB_RUN_ID", "local"),
     "github_run_attempt": os.getenv("GITHUB_RUN_ATTEMPT", "1"),
     "python": platform.python_version(),
@@ -67,5 +70,8 @@ manifest = {
     "stage_compute_seconds": {"extract": time.perf_counter() - started},
     "choices": json.loads((ROOT / "pipeline/choices.json").read_text()),
 }
+if os.getenv("TOY_SOURCE_PROVIDER") == "supabase":
+    shutil.copyfile(source, OUT / "source.sqlite")
+    manifest["extraction_outputs"]["source.sqlite"] = manifest["source_sha256"]
 (OUT / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 print(f"EXTRACT complete: {len(rows)} synthetic sets, through {manifest['last_year']}; source {manifest['source_sha256'][:12]}")

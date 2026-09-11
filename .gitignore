@@ -13,3 +13,7 @@ demo-capture/
 private/
 
 stages/
+
+supabase/.temp/
+supabase/.env*
+supabase/.branches/

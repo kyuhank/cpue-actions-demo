@@ -3,7 +3,16 @@ run-name: "Toy CPUE · ${{ github.event_name }} · ${{ github.sha }}"
 
 on:
   workflow_call:
+    secrets:
+      SUPABASE_URL:
+        required: false
+      SUPABASE_ANON_KEY:
+        required: false
     inputs:
+      data_version:
+        required: false
+        type: string
+        default: ''
       data_repository:
         required: true
         type: string
@@ -41,6 +50,8 @@ jobs:
       TOY_GITHUB_JOB: workshop
       TOY_STAGE_CONFIG: ${{ inputs.data_repository && 'source-data/config/stages.json' || 'config/stages.json' }}
       TOY_DEMO_PACE_SECONDS: 4
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      TOY_DATABASE_VERSION: ${{ inputs.data_version }}
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -56,6 +67,11 @@ jobs:
           repository: ${{ inputs.data_repository }}
           ref: ${{ inputs.data_ref }}
           path: source-data
+      - name: Fetch versioned database snapshot
+        if: env.SUPABASE_URL != '' || inputs.data_version != ''
+        env:
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: python3 supabase/snapshot.py
       - name: Restore and verify reusable outputs
         id: plan
         env:
@@ -68,7 +84,7 @@ jobs:
             --volume "$PWD:/work" --workdir /work \
             --env TOY_CODE_COMMIT --env TOY_DATA_COMMIT --env TOY_DATA_REPOSITORY \
             --env TOY_SOURCE_DATABASE --env TOY_CONTAINER_IMAGE --env TOY_EXECUTION_MODE --env TOY_GITHUB_JOB \
-            --env TOY_STAGE_CONFIG --env TOY_DEMO_PACE_SECONDS \
+            --env TOY_STAGE_CONFIG --env TOY_DEMO_PACE_SECONDS --env TOY_SOURCE_PROVIDER --env TOY_SOURCE_VERSION \
             --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env ImageVersion \
             "$TOY_CONTAINER_IMAGE" sleep 600
       - name: "01 Extract${{ steps.plan.outputs.extract == 'reuse' && ' · reused' || '' }}"

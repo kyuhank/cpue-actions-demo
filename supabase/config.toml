@@ -1,0 +1,4 @@
+project_id = "cpue-workshop"
+
+[functions.dispatch-workshop]
+verify_jwt = false

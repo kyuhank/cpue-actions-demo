@@ -37,6 +37,15 @@ manifest['configuration'] = {
 values = ''.join('<tr><td>' + labels[x['choice']] + f'</td><td>{float(x["M"]):.2f}</td>' + ''.join(f'<td>{float(x[k]):.3f}</td>' for k in ('final_index', 'final_SB_over_SB0', 'log_index_SSE')) + '</tr>' for x in rows)
 records = [('Data source', manifest['source_repository']), ('Data release / commit', manifest.get('source_version') or manifest['source_git_commit']), ('Extraction + analysis code', manifest.get('code_repository', 'kyuhank/cpue-actions-demo') + ' @ ' + manifest['git_commit']), ('Settings code', manifest['configuration']['repository'] + ' @ ' + manifest['configuration']['git_commit']), ('Snapshot SHA-256', manifest['source_sha256']), *[(name + ' SHA-256', digest) for name, digest in manifest.get('extraction_queries', {'extract.sql': manifest['query_sha256']}).items()], ('Run / attempt', f"{manifest['github_run_id']} / {manifest['github_run_attempt']}"), ('Extraction origin run', manifest.get('extraction_run_id', manifest['github_run_id'])), ('Python / SQLite', f"{manifest['python']} / {manifest['sqlite']}"), ('Execution', manifest['execution']), ('Runner image', manifest['runner_image']), ('Container digest', manifest.get('container_image','none; native Python'))]
 trail = ''.join(f'<tr><th>{name}</th><td><code>{html.escape(str(value))}</code></td></tr>' for name, value in records)
+qc = manifest.get('data_release', {}).get('quality_check')
+intake_record = ''
+if qc:
+    intake_record = ('<h2>00 · Check incoming data before publication</h2><p>The incoming batch of '
+        + str(qc['rows_received']) + ' sets passed the recorded data checks before release '
+        + str(manifest['source_version']) + ' was published. Failed checks return reasons without publishing data or triggering analysis. '
+        'These checks validate the intake contract; scientific review of CPUE diagnostics remains a separate step.</p><p>'
+        + html.escape('; '.join(qc['checks'])) + '.</p><p>Validation rule version '
+        + str(qc['rule_version']) + ' · SQL function SHA-256: <code>' + html.escape(qc['rules_sha256']) + '</code>.</p>')
 stats = manifest.get('extraction', {})
 extraction = ''.join(f'<div class="stat"><b>{value:,}</b><span>{label}</span></div>' for label, value in [('sets retained', stats.get('retained_rows', manifest['rows'])), ('vessels', stats.get('vessels', 4)), ('hooks', stats.get('total_hooks', 0)), ('zero-catch sets retained', stats.get('zero_catch_sets', 0))])
 diagnostics = json.loads((OUT / 'cpue-diagnostics.json').read_text())
@@ -70,7 +79,7 @@ content = f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="v
 <main><div class="eyebrow">SYNTHETIC LONGLINE WORKFLOW · DRAFT FOR REVIEW</div><h1>From a data update<br>to a reviewable result.</h1>
 <div class="notice">Wholly synthetic data and toy models. No management advice.</div>
 <div class="meta">Data through {manifest['last_year']} · {manifest['rows']:,} sets · Run {manifest['github_run_id']}, attempt {manifest['github_run_attempt']}</div>
-{update_record}<h2>01 · Extract and check the data</h2><div class="stats">{extraction}</div><p>Retained {manifest['rows']:,} of {stats.get('input_rows', manifest['rows']):,} input sets. Checked unique set identities, valid effort and catch, and matching annual catch and CPUE coverage. The extraction query and snapshot hashes are recorded below.</p>
+{intake_record}{update_record}<h2>01 · Extract and check the data</h2><div class="stats">{extraction}</div><p>Retained {manifest['rows']:,} of {stats.get('input_rows', manifest['rows']):,} input sets. Checked unique set identities, valid effort and catch, and matching annual catch and CPUE coverage. The extraction query and snapshot hashes are recorded below.</p>
 <h2>02 · Standardise CPUE and compare choices</h2><div class="plots">{plots}</div><table><tr><th>CPUE choice</th><th>Natural mortality M</th><th>Latest CPUE / first year</th><th>Latest toy SB/SB₀</th><th>Log-index SSE</th></tr>{values}</table>
 <p>The synthetic records include annual availability variation, changing effort and overdispersed set catches. The fleet shifts toward vessels with higher catchability. Including or omitting a vessel effect changes the index. Both choices use a Poisson log link, an effort offset, zero catches and equal vessel prediction weights. Each index is scaled to its first year.</p>
 <table><tr><th>Poisson CPUE model</th><th>Parameters</th><th>Deviance</th><th>Pearson dispersion</th></tr>{diagnostic_rows}</table><p>Diagnostics are calculated from the set-level fitted values. Overdispersion is intentional in the generated data; these simple Poisson mean models do not provide uncertainty estimates. The year + vessel model uses iterative proportional fitting; year only uses the analytic Poisson group means.</p>

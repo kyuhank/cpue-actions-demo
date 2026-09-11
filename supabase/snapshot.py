@@ -39,6 +39,10 @@ def materialise(snapshot, target):
         if db.execute('SELECT max(year) FROM removals').fetchone()[0] != snapshot['version']:
             raise ValueError('Snapshot version and data years differ')
     temporary.replace(target)
+    target.with_suffix('.release.json').write_text(json.dumps({
+        'version': snapshot['version'], 'published_at': snapshot.get('published_at'),
+        'quality_check': snapshot.get('quality_check'),
+    }, indent=2) + '\n')
     return hashlib.sha256(target.read_bytes()).hexdigest()
 
 
@@ -52,3 +56,5 @@ if __name__ == '__main__':
         with open(os.environ['GITHUB_ENV'], 'a') as f:
             f.write(f'TOY_SOURCE_PROVIDER=supabase\nTOY_SOURCE_VERSION={snapshot["version"]}\n')
     print(f'DATABASE SNAPSHOT: version {snapshot["version"]}; {len(snapshot["sets"])} synthetic sets; sha256 {digest}')
+    if snapshot.get('quality_check'):
+        print('DATA QUALITY: accepted incoming batch; rules sha256 ' + snapshot['quality_check']['rules_sha256'])

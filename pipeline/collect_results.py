@@ -49,7 +49,7 @@ if any(folder.exists() for folder in folders):
     out = Path('outputs'); out.mkdir(exist_ok=True)
     for name in ('sets.csv', 'catch.csv', 'cpue-session.txt', 'assessment-session.txt'):
         shutil.copyfile(folders[0] / name, out / name)
-    for name in ('extract.sql', 'extract-catch.sql', 'source.sqlite'):
+    for name in ('extract.sql', 'extract-catch.sql', 'source.sqlite', 'source-release.json'):
         if (folders[0] / name).exists():
             shutil.copyfile(folders[0] / name, out / name)
     def write(name, rows):

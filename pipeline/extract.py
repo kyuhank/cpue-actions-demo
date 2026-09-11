@@ -78,5 +78,10 @@ manifest = {
 if os.getenv("TOY_SOURCE_PROVIDER") == "supabase":
     shutil.copyfile(source, OUT / "source.sqlite")
     manifest["extraction_outputs"]["source.sqlite"] = manifest["source_sha256"]
+    release = source.with_suffix('.release.json')
+    if release.exists():
+        manifest['data_release'] = json.loads(release.read_text())
+        shutil.copyfile(release, OUT / 'source-release.json')
+        manifest['extraction_outputs']['source-release.json'] = hashlib.sha256(release.read_bytes()).hexdigest()
 (OUT / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 print(f"EXTRACT complete: {len(rows)} synthetic sets, through {manifest['last_year']}; source {manifest['source_sha256'][:12]}")

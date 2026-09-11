@@ -1,0 +1,14 @@
+.quarto/
+*_files/
+__pycache__/
+.venv/
+.demo/
+outputs/
+demo-capture/
+*.log
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+.env
+private/
+

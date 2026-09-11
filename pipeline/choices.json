@@ -1,0 +1,10 @@
+{
+  "cpue_comparison": "year + vessel versus year only",
+  "family": "Poisson with log link",
+  "effort_offset": "log(hooks / 1000)",
+  "prediction": "equal vessel weights, 1000 hooks, scale to first-year mean",
+  "zeros": "retained",
+  "assessment": "Schaefer production model; fixed r = 0.35; B_initial = K; fit K and q",
+  "purpose": "toy demonstration of recorded analyst choices; no management advice"
+}
+

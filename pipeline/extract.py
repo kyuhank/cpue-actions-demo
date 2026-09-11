@@ -12,7 +12,7 @@ import time
 started = time.perf_counter()
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "outputs"
+OUT = Path.cwd() / "outputs"
 OUT.mkdir(exist_ok=True)
 source = ROOT / os.getenv("TOY_SOURCE_DATABASE", "data/toy-fishery.sqlite")
 query = (ROOT / "pipeline/extract.sql").read_text()
@@ -45,6 +45,8 @@ def revision(folder, override):
 commit = revision(ROOT, "TOY_CODE_COMMIT")
 manifest = {
     "data_kind": "wholly synthetic; no confidential fishery data",
+    "execution_mode": os.getenv("TOY_EXECUTION_MODE", "independent_jobs"),
+    "physical_github_job": os.getenv("TOY_GITHUB_JOB", "per-stage jobs"),
     "source_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
     "query_sha256": hashlib.sha256(query.encode()).hexdigest(),
     "git_commit": commit,

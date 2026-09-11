@@ -58,11 +58,11 @@ manifest['dependencies'] = {'extract': [], 'cpue_vessel': ['extract'], 'cpue_yea
     'prepare_vessel': ['cpue_vessel'], 'prepare_year': ['cpue_year'],
     **{case['key']: ['prepare_vessel' if case['choice'] == 'vessel_adjusted' else 'prepare_year'] for case in case_definitions},
     'report': [case['key'] for case in case_definitions]}
-manifest['execution'] = 'GitHub jobs' if 'collection' in manifest else 'local stages using the same case definitions'
+manifest['execution'] = ('10 analysis stages executed as sequential steps in one GitHub job' if manifest.get('execution_mode') == 'single_runner_steps' else 'independent GitHub jobs') if 'collection' in manifest else 'local stages using the same case definitions'
 manifest['report_format'] = 'standalone HTML; Python standard library'
 (OUT / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
 values = ''.join('<tr><td>' + labels[x['choice']] + f'</td><td>{float(x["M"]):.2f}</td>' + ''.join(f'<td>{float(x[k]):.3f}</td>' for k in ('final_index', 'final_SB_over_SB0', 'log_index_SSE')) + '</tr>' for x in rows)
-records = [('Data repository', manifest['source_repository']), ('Data commit', manifest['source_git_commit']), ('Code commit', manifest['git_commit']), ('Snapshot SHA-256', manifest['source_sha256']), ('SQL SHA-256', manifest['query_sha256']), ('Run / attempt', f"{manifest['github_run_id']} / {manifest['github_run_attempt']}"), ('Python / SQLite', f"{manifest['python']} / {manifest['sqlite']}"), ('Runner image', manifest['runner_image']), ('Container digest', manifest.get('container_image','none; native Python'))]
+records = [('Data repository', manifest['source_repository']), ('Data commit', manifest['source_git_commit']), ('Code commit', manifest['git_commit']), ('Snapshot SHA-256', manifest['source_sha256']), ('SQL SHA-256', manifest['query_sha256']), ('Run / attempt', f"{manifest['github_run_id']} / {manifest['github_run_attempt']}"), ('Python / SQLite', f"{manifest['python']} / {manifest['sqlite']}"), ('Execution', manifest['execution']), ('Runner image', manifest['runner_image']), ('Container digest', manifest.get('container_image','none; native Python'))]
 trail = ''.join(f'<tr><th>{name}</th><td><code>{html.escape(str(value))}</code></td></tr>' for name, value in records)
 stats = manifest.get('extraction', {})
 extraction = ''.join(f'<div class="stat"><b>{value:,}</b><span>{label}</span></div>' for label, value in [('sets retained', stats.get('retained_rows', manifest['rows'])), ('vessels', stats.get('vessels', 4)), ('hooks', stats.get('total_hooks', 0)), ('zero-catch sets retained', stats.get('zero_catch_sets', 0))])

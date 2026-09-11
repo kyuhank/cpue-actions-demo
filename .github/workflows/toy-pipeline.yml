@@ -56,8 +56,8 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-  cpue:
-    name: 02 CPUE
+  cpue_vessel:
+    name: '02 CPUE: year + vessel'
     needs: extract
     runs-on: ubuntu-24.04
     timeout-minutes: 8
@@ -71,18 +71,20 @@ jobs:
         with:
           name: extract-${{ github.run_attempt }}
           path: outputs/
-      - name: Compare two recorded CPUE choices
+      - name: Fit CPUE with year and vessel effects
         run: sh scripts/container-stage.sh cpue
+        env:
+          TOY_CPUE_CHOICE: vessel_adjusted
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: cpue-${{ github.run_attempt }}
+          name: cpue_vessel-${{ github.run_attempt }}
           path: outputs/
           retention-days: 30
           if-no-files-found: error
 
-  assessment:
-    name: 03 Assessment
-    needs: cpue
+  cpue_year:
+    name: '02 CPUE: year only'
+    needs: extract
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
@@ -93,8 +95,38 @@ jobs:
           ref: ${{ inputs.analysis_ref || github.sha }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: cpue-${{ github.run_attempt }}
+          name: extract-${{ github.run_attempt }}
           path: outputs/
+      - name: Fit CPUE with year effects
+        run: sh scripts/container-stage.sh cpue
+        env:
+          TOY_CPUE_CHOICE: year_only
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: cpue_year-${{ github.run_attempt }}
+          path: outputs/
+          retention-days: 30
+          if-no-files-found: error
+
+  assessment:
+    name: 03 Assessment
+    needs: [cpue_vessel, cpue_year]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: cpue_vessel-${{ github.run_attempt }}
+          path: inputs/cpue_vessel/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: cpue_year-${{ github.run_attempt }}
+          path: inputs/cpue_year/
       - name: Fit the toy biomass models
         run: sh scripts/container-stage.sh assessment
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

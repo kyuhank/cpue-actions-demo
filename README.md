@@ -7,7 +7,8 @@ During a hosted session, visitors can start the real GitHub workflow without an 
 The browser companion also runs the calculations locally.
 
 New data in [cpue-toy-data](https://github.com/kyuhank/cpue-toy-data) trigger
-four dependent GitHub jobs using this repository’s pinned workflow.
+five GitHub jobs using this repository’s pinned workflow. Two CPUE jobs run in
+parallel; assessment waits for both and checks their inputs before fitting.
 Kflow2 is a separate private orchestration app; its source is not included here.
 
 ```bash

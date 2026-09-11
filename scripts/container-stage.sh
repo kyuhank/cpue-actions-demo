@@ -7,6 +7,6 @@ export TOY_DATA_COMMIT="${TOY_DATA_COMMIT:-$TOY_CODE_COMMIT}"
 docker run --rm --pull always --network none --user "$(id -u):$(id -g)" \
   --volume "$PWD:/work" --workdir /work \
   --env TOY_CODE_COMMIT --env TOY_DATA_COMMIT --env TOY_CONTAINER_IMAGE \
-  --env TOY_DATA_REPOSITORY --env TOY_SOURCE_DATABASE \
+  --env TOY_DATA_REPOSITORY --env TOY_SOURCE_DATABASE --env TOY_CPUE_CHOICE --env GITHUB_JOB \
   --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env ImageVersion \
   "$TOY_CONTAINER_IMAGE" python "pipeline/$1.py"

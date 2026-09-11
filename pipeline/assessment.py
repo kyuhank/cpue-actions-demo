@@ -5,10 +5,12 @@ from pathlib import Path
 import platform
 import json
 import time
+import runpy
 
 started = time.perf_counter()
 
 OUT = Path('outputs')
+runpy.run_path(str(Path(__file__).with_name('prepare_inputs.py')), run_name='__main__')
 indices = list(csv.DictReader((OUT / 'cpue.csv').open()))
 removals = list(csv.DictReader((OUT / 'catch.csv').open()))
 r = .35

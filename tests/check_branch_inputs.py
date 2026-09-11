@@ -56,6 +56,9 @@ with tempfile.TemporaryDirectory(prefix='cpue-branches-') as temporary:
     run(ROOT / 'pipeline/report.py', receiver)
     for name in ('cpue.csv', 'assessment-input.csv', 'summary.csv', 'biomass.csv'):
         assert (receiver / 'outputs' / name).read_bytes() == (baseline / 'outputs' / name).read_bytes(), name
+    report = (receiver / 'outputs/report.html').read_text()
+    assert 'age-structured toy model' in report and 'Schaefer' not in report
+    assert '0.20' in report and '0.30' in report
     manifest = json.loads((receiver / 'outputs/manifest.json').read_text())
     assert manifest['dependencies']['assessment_vessel_ref'] == ['prepare_vessel']
     assert len(manifest['assessment_runs']) == 4

@@ -18,10 +18,10 @@ export async function handle(request: Request) {
       return new Response("Cloud execution is disabled", {status:503});
     try {
       const {rpc} = await import("../workshop-api/database.ts");
-      const {github} = await import("../workshop-api/github.ts");
+      const {dispatch} = await import("../workshop-api/github.ts");
       if(!await rpc("workshop_dispatch_claim",{p_version:version}))
         return new Response("Release already requested",{status:200});
-      await github("actions/workflows/update.yml/dispatches","POST",{ref:"main",inputs:{data_version:String(version)}});
+      await dispatch(version);
       return new Response("Workflow requested",{status:202});
     } catch {return new Response("Dispatch was not confirmed; inspect the release and workflow before retrying",{status:502});}
   }

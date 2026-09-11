@@ -4,7 +4,7 @@ Synthetic records → extraction → two CPUE choices → input preparation → 
 
 [Open the workshop demo](https://kyuhank.github.io/cpue-actions-demo/).
 The cloud-connected views need no presentation host. Once the owner connects the restricted credential and confirms a $0 Actions spending budget, visitors can run the fixed demonstration without an account.
-The browser companion also runs the calculations locally.
+The browser companion also runs the calculations locally. Demo changes use a temporary branch. Ten minutes after the latest run completes, the server removes its run history and outputs and restores the synthetic baseline.
 
 New data in [cpue-toy-data](https://github.com/kyuhank/cpue-toy-data) trigger
 one GitHub job with eleven recorded stages using this repository’s pinned workflow. Input preparation combines each CPUE index with extracted catches; the full assessment would also assemble compositions and other inputs. Each CPUE branch prepares

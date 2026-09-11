@@ -55,7 +55,10 @@ def download_previous(target):
     if repo not in ('kyuhank/cpue-toy-data', 'kyuhank/cpue-actions-demo'):
         return
     workflow = 'update.yml' if repo.endswith('cpue-toy-data') else 'toy-pipeline.yml'
-    runs = json.loads(gh(f'repos/{repo}/actions/workflows/{workflow}/runs?status=success&branch=main&per_page=1'))['workflow_runs']
+    branch = os.getenv('GITHUB_REF_NAME', 'main')
+    if branch not in ('main', 'demo-runtime'):
+        return
+    runs = json.loads(gh(f'repos/{repo}/actions/workflows/{workflow}/runs?status=success&branch={branch}&per_page=1'))['workflow_runs']
     if not runs:
         return
     run = runs[0]

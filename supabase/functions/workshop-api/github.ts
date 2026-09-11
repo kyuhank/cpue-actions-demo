@@ -1,5 +1,6 @@
 import { unzipSync } from 'npm:fflate@0.8.2';
 export const REPO = 'kyuhank/cpue-toy-data';
+export const DEMO_BRANCH = 'demo-runtime';
 export const definitions = [
  ['extract','01 Extract',[]], ['cpue_vessel','02 CPUE: year + vessel',['extract']],
  ['cpue_year','02 CPUE: year only',['extract']],
@@ -13,12 +14,12 @@ export const definitions = [
  ['report','06 Report',['synthesis']],
 ] as const;
 export const changeable = new Set(definitions.map(x=>x[0]));
-export async function github(path:string, method='GET', body?:unknown):Promise<Response> {
+export async function github(path:string, method='GET', body?:unknown, allowMissing=false):Promise<Response> {
  const token=Deno.env.get('WORKSHOP_GITHUB_TOKEN');
  const headers:Record<string,string>={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'cpue-workshop','Content-Type':'application/json'};
  if(token)headers.Authorization='Bearer '+token;
  const r=await fetch('https://api.github.com/repos/'+REPO+'/'+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body),redirect:'manual',signal:AbortSignal.timeout(20000)});
- if(!r.ok&&r.status!==302)throw Error('GitHub request could not be confirmed ('+r.status+').');
+ if(!r.ok&&r.status!==302&&!(allowMissing&&r.status===404))throw Error('GitHub request could not be confirmed ('+r.status+').');
  return r;
 }
 export async function json(path:string){return (await github(path)).json();}
@@ -31,13 +32,37 @@ export function mapRun(run:any,jobs:any[]){
   states[key]=state;
   return {key,label:label.slice(3),parents,status:state,reused,source_id:`${run.id}-${run.run_attempt}-${key}`,started_at:step?.started_at,completed_at:step?.completed_at,html_url:physical?.html_url,_step_number:step?.number};
  });
- return {ready:true,stages,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:run.head_sha,status:run.status,conclusion:run.conclusion,
+ return {ready:true,has_run:true,stages,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
  trigger_message:run.display_title.startsWith('Database version ')?run.display_title:(run.head_commit?.message||run.display_title).split('\n')[0].slice(0,160),database_version:/^Database version 20\d{2}$/.test(run.display_title)?Number(run.display_title.slice(-4)):null,
- execution:{mode:'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at};
+ execution:{mode:'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};
 }
+export function emptyRun(){return {ready:true,has_run:false,stages:definitions.map(([key,label,parents])=>({key,label:label.slice(3),parents,status:'waiting',reused:false,source_id:'',_step_number:null})),run_id:null,number:null,attempt:null,run_url:'',commit:'',status:'completed',conclusion:'success',database_version:2023,execution:{mode:'steps',job_count:0,jobs:[]},source:{stale:false,last_success:new Date().toISOString()},created_at:null,completed_at:null};}
 export async function current(){const runs=(await json('actions/workflows/update.yml/runs?per_page=1')).workflow_runs;
- if(!runs.length)return {ready:false};const r=runs[0];const jobs=(await json(`actions/runs/${r.id}/attempts/${r.run_attempt}/jobs?per_page=100`)).jobs;
+ if(!runs.length)return emptyRun();const r=runs[0];const jobs=(await json(`actions/runs/${r.id}/attempts/${r.run_attempt}/jobs?per_page=100`)).jobs;
  return mapRun(r,jobs);
+}
+export async function ensureBranch(){
+ const existing=await github('git/ref/heads/'+DEMO_BRANCH,'GET',undefined,true);
+ if(existing.ok)return;
+ const base=await json('git/ref/heads/main');
+ await github('git/refs','POST',{ref:'refs/heads/'+DEMO_BRANCH,sha:base.object.sha});
+}
+export async function dispatch(version?:number){
+ await ensureBranch();
+ await github('actions/workflows/update.yml/dispatches','POST',{ref:DEMO_BRANCH,inputs:version?{data_version:String(version)}:{}});
+}
+export async function removeDemonstrationRuns(){
+ // Fixed workflow and repository: no guest can choose a deletion target.
+ // Delete pages from the front because removing a run changes pagination.
+ for(let page=0;page<20;page++){
+  const runs=(await json('actions/workflows/update.yml/runs?per_page=100')).workflow_runs;
+  if(!runs.length)break;
+  if(runs.some((r:any)=>r.status!=='completed'||r.path!=='.github/workflows/update.yml'))throw Error('A workflow is active; cleanup will wait.');
+  for(const r of runs)await github('actions/runs/'+r.id,'DELETE',undefined,true);
+ }
+ const remaining=(await json('actions/workflows/update.yml/runs?per_page=1')).workflow_runs;
+ if(remaining.length)throw Error('More demonstration records remain; cleanup will resume.');
+ await github('git/refs/heads/'+DEMO_BRANCH,'DELETE',undefined,true);
 }
 async function download(response:Response,limit:number):Promise<Uint8Array>{
  let r=response;if(r.status===302){const url=new URL(r.headers.get('location')||'');if(url.protocol!=='https:'||!(/(^|\.)(githubusercontent\.com|blob\.core\.windows\.net)$/.test(url.hostname)))throw Error('Unknown GitHub download host.');r=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(20000)});}
@@ -65,13 +90,15 @@ export async function consoleLines(status:any){
 }
 export async function change(stage:string){
  if(!changeable.has(stage as any))throw Error('Unknown stage.');
- const record=await json('contents/config/stages.json?ref=main'),config=JSON.parse(atob(record.content.replaceAll('\n','')));
+ await ensureBranch();
+ const record=await json('contents/config/stages.json?ref='+DEMO_BRANCH),config=JSON.parse(atob(record.content.replaceAll('\n','')));
  let setting,description;
  if(stage.startsWith('cpue_')){const value=config[stage]?.min_hooks===2000?0:2000;setting={min_hooks:value};description=`${stage}: minimum hooks = ${value}`;}
  else if(stage.startsWith('assessment_')){const base=stage.endsWith('high_m')?.30:.20;const value=config[stage]?.M===undefined||config[stage].M===base?Math.round((base+.05)*100)/100:base;setting={M:value};description=`${stage}: natural mortality M = ${value.toFixed(2)}`;}
  else{const value=config[stage]?.revision===1?0:1;setting={revision:value};description=`${stage}: rerun revision ${value}`;}
  config[stage]=setting;
- const body={message:'Update synthetic '+description,sha:record.sha,branch:'main',content:btoa(JSON.stringify(config,null,2)+'\n'),author:{name:'kyuhank',email:'kh2064@gmail.com'},committer:{name:'kyuhank',email:'kh2064@gmail.com'}};
+ const body={message:'Update synthetic '+description,sha:record.sha,branch:DEMO_BRANCH,content:btoa(JSON.stringify(config,null,2)+'\n'),author:{name:'kyuhank',email:'kh2064@gmail.com'},committer:{name:'kyuhank',email:'kh2064@gmail.com'}};
  const committed=await (await github('contents/config/stages.json','PUT',body)).json();
+ await dispatch();
  return {stage,setting,description,commit:committed.commit.sha,url:committed.commit.html_url};
 }

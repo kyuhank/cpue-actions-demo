@@ -3,6 +3,7 @@ const $=id=>document.getElementById(id);let latest='',loaded='';
 if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');
 async function refresh(){if(window.workshopActive===false)return;try{
  const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw Error('Local status unavailable');const d=await r.json();if(!d.ready)throw Error('No verified run available');
+ if(d.has_run===false){latest='';loaded='';$('years').textContent='Ready';$('rows').textContent='Start a run in the workflow view.';$('stages').textContent='No active demonstration';$('run').removeAttribute('href');$('report').classList.add('disabled');$('report').removeAttribute('href');$('report-view').hidden=true;$('report-content').srcdoc='';for(const key of ['data','code','settings']){$(key).textContent='—';$(key).removeAttribute('href');}$('message').textContent='Reports and execution records are cleared 10 minutes after the latest completed run.';return;}
  const id=d.stages.find(s=>s.key==='report').source_id,complete=d.status==='completed'&&d.conclusion==='success'&&d.stages.every(s=>s.status==='completed');latest=id;
  $('stages').textContent=d.stages.filter(s=>s.status==='completed').length+' / '+d.stages.length+' jobs complete';$('run').href=d.run_url;
  $('report').classList.toggle('disabled',!complete||loaded!==id);

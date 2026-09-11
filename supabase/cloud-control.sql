@@ -9,12 +9,22 @@ create table if not exists workshop_private.cloud_requests (
 create table if not exists workshop_private.cloud_cache (
   key text primary key, value jsonb not null, expires_at timestamptz not null
 );
+create table if not exists workshop_private.cloud_demo (
+  id boolean primary key default true check(id),
+  phase text not null default 'idle' check(phase in ('idle','active','cleaning')),
+  run_id bigint, reset_at timestamptz, last_reset_at timestamptz,
+  generation integer not null default 0
+);
+insert into workshop_private.cloud_demo(id) values(true) on conflict do nothing;
 revoke all on all tables in schema workshop_private from public, anon, authenticated;
 create or replace function public.workshop_reserve(p_id uuid, p_kind text) returns jsonb
 language plpgsql security definer set search_path='' as $$
 declare previous workshop_private.cloud_requests; total integer; latest timestamptz;
 begin
  perform pg_advisory_xact_lock(260913);
+ if exists(select 1 from workshop_private.cloud_demo where phase='cleaning') then
+   raise exception 'The demonstration is being reset';
+ end if;
  if p_kind not in ('data','invalid','extract','prepare_vessel','prepare_year','synthesis','report','cpue_vessel','cpue_year','assessment_vessel_ref',
    'assessment_vessel_high_m','assessment_year_ref','assessment_year_high_m') then raise exception 'Unknown action'; end if;
  select * into previous from workshop_private.cloud_requests where id=p_id;

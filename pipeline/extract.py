@@ -54,6 +54,7 @@ manifest = {
     "github_run_attempt": os.getenv("GITHUB_RUN_ATTEMPT", "1"),
     "python": platform.python_version(),
     "sqlite": sqlite3.sqlite_version,
+    "container_image": os.getenv("TOY_CONTAINER_IMAGE", "none; native Python"),
     "runner_image": os.getenv("ImageVersion", "local"),
     "rows": len(rows), "first_year": min(r[1] for r in rows), "last_year": max(r[1] for r in rows),
     "extraction": {"input_rows": input_rows, "retained_rows": len(rows),

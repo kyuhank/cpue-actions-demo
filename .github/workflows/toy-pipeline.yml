@@ -15,7 +15,7 @@ on:
         type: string
   push:
     branches: [main]
-    paths: ['data/**', 'pipeline/**', '.github/workflows/toy-pipeline.yml']
+    paths: ['data/**', 'pipeline/**', 'scripts/container-stage.sh', '.github/workflows/toy-pipeline.yml']
   workflow_dispatch:
 
 permissions:
@@ -44,8 +44,9 @@ jobs:
           ref: ${{ inputs.data_ref }}
           path: source-data
       - name: Extract a checked snapshot
-        run: python3 pipeline/extract.py
+        run: sh scripts/container-stage.sh extract
         env:
+          TOY_DATA_COMMIT: ${{ inputs.data_ref || github.sha }}
           TOY_DATA_REPOSITORY: ${{ inputs.data_repository || github.repository }}
           TOY_SOURCE_DATABASE: ${{ inputs.data_repository && 'source-data/data/toy-fishery.sqlite' || 'data/toy-fishery.sqlite' }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -71,7 +72,7 @@ jobs:
           name: extract-${{ github.run_attempt }}
           path: outputs/
       - name: Compare two recorded CPUE choices
-        run: python3 pipeline/cpue.py
+        run: sh scripts/container-stage.sh cpue
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: cpue-${{ github.run_attempt }}
@@ -95,7 +96,7 @@ jobs:
           name: cpue-${{ github.run_attempt }}
           path: outputs/
       - name: Fit the toy biomass models
-        run: python3 pipeline/assessment.py
+        run: sh scripts/container-stage.sh assessment
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: assessment-${{ github.run_attempt }}
@@ -119,7 +120,7 @@ jobs:
           name: assessment-${{ github.run_attempt }}
           path: outputs/
       - name: Render the draft report
-        run: python3 pipeline/report.py
+        run: sh scripts/container-stage.sh report
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: report-${{ github.run_attempt }}

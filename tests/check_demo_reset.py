@@ -47,7 +47,10 @@ try:
     assert good('select public.workshop_demo_claim_reset(101)') == 't'
     assert good('select public.workshop_demo_claim_reset(101)') == 'f'
     assert sql(f"select public.workshop_reserve('{uuid.uuid4()}','data')").returncode != 0
+    good("select public.workshop_cache_put('status','{}',3600);select public.workshop_cache_put('output:101:manifest.json','{}',3600);select public.workshop_cache_put('unrelated','7',3600);")
     good('set role service_role;select public.workshop_demo_finish_reset(101)')
+    assert good('select count(*) from workshop_private.cloud_dispatches') == '0'
+    assert good("select key from workshop_private.cloud_cache") == 'unrelated'
     assert good('select public.cpue_snapshot(2023)') == baseline
     assert good('select max(version) from public.cpue_releases') == '2023'
     assert json.loads(good('select public.workshop_state()'))['remaining'] == 59

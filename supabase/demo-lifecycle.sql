@@ -63,8 +63,9 @@ begin
  alter table public.cpue_sets enable trigger cpue_sets_immutable;
  alter table public.cpue_catches enable trigger cpue_catches_immutable;
  alter table public.cpue_releases enable trigger cpue_releases_immutable;
- delete from workshop_private.cloud_dispatches;
- delete from workshop_private.cloud_cache;
+ delete from workshop_private.cloud_dispatches where version>=2023;
+ delete from workshop_private.cloud_cache
+   where key='status' or key like 'console:%' or key like 'output:%';
  -- Retain today's request counters so resetting cannot bypass the daily limit.
  delete from workshop_private.cloud_requests where created_at<date_trunc('day',now());
  update workshop_private.cloud_demo set phase='idle',run_id=null,reset_at=null,cleanup_until=null,

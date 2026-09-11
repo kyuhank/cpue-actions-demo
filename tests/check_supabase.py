@@ -46,6 +46,10 @@ try:
         body = json.dumps(batch).replace("'", "''")
         result = json.loads(sql(f"set role service_role; select public.cpue_check_year(2024,'{body}'::jsonb,{catch});"))
         assert not result['accepted'] and code in [e['code'] for e in result['errors']], result
+        if code == 'effort':
+            error = next(e for e in result['errors'] if e['code'] == code)
+            assert error['field'] == 'hooks' and error['failed_records'] == 1
+            assert error['examples'] == [{'set_id': rows[0][0], 'observed': batch[0][3]}]
         sql(f"set role service_role; select public.cpue_append_year(2024,'{body}'::jsonb,{catch});", ok=False)
         assert sql('select count(*) from public.release_events;') == '0'
         assert sql('set role anon; select public.cpue_snapshot(2023);') == before

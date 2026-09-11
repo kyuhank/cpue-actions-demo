@@ -72,6 +72,12 @@ with tempfile.TemporaryDirectory(prefix='cpue-incremental-') as folder:
     fourth = root / 'fourth'; (root / 'stages').rename(fourth)
     settings['report'] = {'revision': 1}; config.write_text(json.dumps(settings)); env['GITHUB_RUN_ID'] = '5'
     assert execute(fourth) == {'report'}
+    report_manifest = json.loads((root / 'stages/report/outputs/manifest.json').read_text())
+    assert report_manifest['github_run_id'] == '5' and report_manifest['synthesis_run_id'] == '4'
+    assert report_manifest['extraction_run_id'] == '1'
+    assert report_manifest['configuration']['stage_settings']['report'] == {'revision': 1}
+    assert report_manifest['workflow_plan']['run_id'] == '5'
+    assert '1 stages executed · 10 reused' in (root / 'stages/report/outputs/report.html').read_text()
     third = root / 'before-data-change'; (root / 'stages').rename(third)
     import sqlite3
     with sqlite3.connect(root / 'data/toy-fishery.sqlite') as db:

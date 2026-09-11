@@ -14,6 +14,15 @@ if not Path("outputs/cpue.svg").exists():
     runpy.run_path(str(Path(__file__).with_name("synthesis.py")), run_name="__main__")
 OUT = Path("outputs")
 manifest = json.loads((OUT / "manifest.json").read_text())
+# A report-only update may inherit a synthesis manifest from an earlier run.
+# Keep the scientific origins, but identify this report and its current plan.
+plan_path = Path(__file__).resolve().parents[1] / 'stages/_plan.json'
+if plan_path.exists():
+    manifest.setdefault('extraction_run_id', manifest['github_run_id'])
+    manifest['synthesis_run_id'] = manifest['github_run_id']
+    manifest['workflow_plan'] = json.loads(plan_path.read_text())
+    manifest['github_run_id'] = os.getenv('GITHUB_RUN_ID', 'local')
+    manifest['github_run_attempt'] = os.getenv('GITHUB_RUN_ATTEMPT', '1')
 rows = list(csv.DictReader((OUT / "summary.csv").open()))
 series = list(csv.DictReader((OUT / "biomass.csv").open()))
 colors = {"vessel_adjusted": "#007c83", "year_only": "#d27547"}

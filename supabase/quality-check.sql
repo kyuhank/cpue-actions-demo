@@ -38,7 +38,13 @@ begin
       end if;
       if exists(select 1 from jsonb_array_elements(p_sets) r where
         (r->>3)::numeric not between 1 and 2147483647 or mod((r->>3)::numeric,1)<>0) then
-        errors := errors || jsonb_build_object('code','effort','message','Hooks must be a positive integer; zero effort is rejected.');
+        errors := errors || jsonb_build_object('code','effort','field','hooks',
+          'message','Hooks must be a positive integer; zero effort is rejected.',
+          'failed_records',(select count(*) from jsonb_array_elements(p_sets) r where
+            (r->>3)::numeric not between 1 and 2147483647 or mod((r->>3)::numeric,1)<>0),
+          'examples',(select jsonb_agg(jsonb_build_object('set_id',r->>0,'observed',r->3)) from
+            (select r from jsonb_array_elements(p_sets) r where
+              (r->>3)::numeric not between 1 and 2147483647 or mod((r->>3)::numeric,1)<>0 limit 3) bad));
       end if;
       if exists(select 1 from jsonb_array_elements(p_sets) r where
         (r->>4)::numeric not between 0 and 2147483647 or mod((r->>4)::numeric,1)<>0) then
@@ -51,7 +57,7 @@ begin
     end if;
   end if;
   result := jsonb_build_object('accepted',jsonb_array_length(errors)=0,'errors',errors,
-    'proposed_version',p_year,'rows_received',received,'rule_version',1,
+    'proposed_version',p_year,'rows_received',received,'rule_version',2,
     'rules_sha256',encode(sha256(convert_to(pg_get_functiondef('public.cpue_check_year(integer,jsonb,numeric)'::regprocedure),'UTF8')),'hex'),
     'checks',jsonb_build_array('required fields and types','unique set IDs','positive effort',
       'nonnegative catch; zero catches retained','matching set and catch years','next unpublished release'));

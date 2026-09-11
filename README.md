@@ -3,7 +3,7 @@
 Synthetic records → extraction → two CPUE choices → input preparation → four toy assessments → results synthesis → report.
 
 [Open the workshop demo](https://kyuhank.github.io/cpue-actions-demo/).
-During a hosted session, visitors can start the real GitHub workflow without an account.
+The cloud-connected views need no presentation host. Once the owner connects the restricted credential and confirms a $0 Actions spending budget, visitors can run the fixed demonstration without an account.
 The browser companion also runs the calculations locally.
 
 New data in [cpue-toy-data](https://github.com/kyuhank/cpue-toy-data) trigger
@@ -23,4 +23,4 @@ All data and results are synthetic examples, with no management interpretation.
 
 The presentation uses one GitHub runner and one Docker container. New data run all eleven stages; a CPUE filter change runs six, and one M change runs three. Unchanged outputs are reused only when data, code, container, stage settings and parent fingerprints match, with file checksums verified. Each executed stage includes a four-second presentation pause; computation time is recorded separately. `parallel-pipeline.yml` retains the separate-job example. Protected-data production would use approved HPC.
 
-Optional hosted data: [Supabase Free setup](supabase/README.md). The GitHub-data demo remains active until a project is configured.
+Hosted data and fixed cloud controls: [Supabase Free setup](supabase/README.md). The repository snapshot is a fallback for local calculations.

@@ -5,7 +5,7 @@ const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GE
 const reply=(value:unknown,status=200)=>Response.json(value,{status,headers:cors});
 const enabled=()=>!!Deno.env.get('WORKSHOP_GITHUB_TOKEN')&&Deno.env.get('WORKSHOP_ZERO_BUDGET_CONFIRMED')==='true';
 async function status(){
- const s:any=await cached('status',Deno.env.get('WORKSHOP_GITHUB_TOKEN')?4:300,current),limits=await rpc('workshop_state');
+ const s:any=await cached('status',Deno.env.get('WORKSHOP_GITHUB_TOKEN')?2:300,current),limits=await rpc('workshop_state');
  const pending=limits.last_request?.result?.previous_run===s.run_id&&limits.last_request?.result?.published!==false;
  const can=enabled()&&!pending&&limits.remaining>0&&(!limits.next_update||Date.parse(limits.next_update)<=Date.now())&&s.status==='completed';
  const record=limits.last_request;let intake=record?.result?.quality_check?{quality_check:record.result.quality_check,published:record.result.published,checked_at:Date.parse(record.created_at)/1000}:null;

@@ -12,7 +12,7 @@ export const definitions = [
  ['synthesis','05 Results synthesis',['assessment_vessel_ref','assessment_vessel_high_m','assessment_year_ref','assessment_year_high_m']],
  ['report','06 Report',['synthesis']],
 ] as const;
-export const changeable = new Set(definitions.map(x=>x[0]).filter(x=>x.startsWith('cpue_')||x.startsWith('assessment_')));
+export const changeable = new Set(definitions.map(x=>x[0]));
 export async function github(path:string, method='GET', body?:unknown):Promise<Response> {
  const token=Deno.env.get('WORKSHOP_GITHUB_TOKEN');
  const headers:Record<string,string>={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'cpue-workshop','Content-Type':'application/json'};
@@ -68,7 +68,8 @@ export async function change(stage:string){
  const record=await json('contents/config/stages.json?ref=main'),config=JSON.parse(atob(record.content.replaceAll('\n','')));
  let setting,description;
  if(stage.startsWith('cpue_')){const value=config[stage]?.min_hooks===2000?0:2000;setting={min_hooks:value};description=`${stage}: minimum hooks = ${value}`;}
- else{const base=stage.endsWith('high_m')?.30:.20;const value=config[stage]?.M===undefined||config[stage].M===base?Math.round((base+.05)*100)/100:base;setting={M:value};description=`${stage}: natural mortality M = ${value.toFixed(2)}`;}
+ else if(stage.startsWith('assessment_')){const base=stage.endsWith('high_m')?.30:.20;const value=config[stage]?.M===undefined||config[stage].M===base?Math.round((base+.05)*100)/100:base;setting={M:value};description=`${stage}: natural mortality M = ${value.toFixed(2)}`;}
+ else{const value=config[stage]?.revision===1?0:1;setting={revision:value};description=`${stage}: rerun revision ${value}`;}
  config[stage]=setting;
  const body={message:'Update synthetic '+description,sha:record.sha,branch:'main',content:btoa(JSON.stringify(config,null,2)+'\n'),author:{name:'kyuhank',email:'kh2064@gmail.com'},committer:{name:'kyuhank',email:'kh2064@gmail.com'}};
  const committed=await (await github('contents/config/stages.json','PUT',body)).json();

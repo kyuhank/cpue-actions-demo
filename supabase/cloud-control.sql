@@ -15,7 +15,7 @@ language plpgsql security definer set search_path='' as $$
 declare previous workshop_private.cloud_requests; total integer; latest timestamptz;
 begin
  perform pg_advisory_xact_lock(260913);
- if p_kind not in ('data','invalid','cpue_vessel','cpue_year','assessment_vessel_ref',
+ if p_kind not in ('data','invalid','extract','prepare_vessel','prepare_year','synthesis','report','cpue_vessel','cpue_year','assessment_vessel_ref',
    'assessment_vessel_high_m','assessment_year_ref','assessment_year_high_m') then raise exception 'Unknown action'; end if;
  select * into previous from workshop_private.cloud_requests where id=p_id;
  if found then return jsonb_build_object('duplicate',true,'result',previous.result); end if;

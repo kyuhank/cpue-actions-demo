@@ -62,7 +62,17 @@ with tempfile.TemporaryDirectory(prefix='cpue-incremental-') as folder:
     env['GITHUB_RUN_ID'] = '3'
     assert execute(second) == {'assessment_vessel_high_m', 'synthesis', 'report'}
     assert '3 stages executed · 8 reused' in (root / 'stages/report/outputs/report.html').read_text()
+    # Rerunning preparation retains extraction, both CPUE fits and the other branch.
     third = root / 'third'; (root / 'stages').rename(third)
+    settings = json.loads(config.read_text()); settings['prepare_vessel'] = {'revision': 1}
+    config.write_text(json.dumps(settings)); env['GITHUB_RUN_ID'] = '4'
+    assert execute(third) == {'prepare_vessel', 'assessment_vessel_ref', 'assessment_vessel_high_m', 'synthesis', 'report'}
+    for key in ('extract', 'cpue_vessel', 'cpue_year', 'prepare_year'):
+        assert (root / 'stages' / key / 'record.json').read_bytes() == (third / key / 'record.json').read_bytes()
+    fourth = root / 'fourth'; (root / 'stages').rename(fourth)
+    settings['report'] = {'revision': 1}; config.write_text(json.dumps(settings)); env['GITHUB_RUN_ID'] = '5'
+    assert execute(fourth) == {'report'}
+    third = root / 'before-data-change'; (root / 'stages').rename(third)
     import sqlite3
     with sqlite3.connect(root / 'data/toy-fishery.sqlite') as db:
         db.execute('UPDATE sets SET catch_n=catch_n+1 WHERE rowid=1')

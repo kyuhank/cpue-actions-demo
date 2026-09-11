@@ -6,11 +6,12 @@ Deno.test('Unconfigured cloud cannot publish; paths, fields and request identiti
  Deno.env.delete('WORKSHOP_GITHUB_TOKEN');Deno.env.delete('WORKSHOP_ZERO_BUDGET_CONFIRMED');
  equal((await handle(new Request(endpoint+'/api/presentation-info'))).status,200);
  const req=(path='/api/update',body='{}',headers={})=>new Request(endpoint+path,{method:'POST',body,headers:{'Content-Type':'application/json','X-Workshop-Action':'publish-synthetic-data','X-Workshop-Request':crypto.randomUUID(),...headers}});
- for(const path of ['/api/change/extract','/api/change/../../private','/admin','/api/dispatch'])equal((await handle(req(path))).status,404);
+ for(const path of ['/api/change/private-stage','/api/change/../../private','/admin','/api/dispatch'])equal((await handle(req(path))).status,404);
  for(const body of ['{"repo":"private"}','{"command":"anything"}','[]','null','x'.repeat(65)])equal((await handle(req('/api/update',body))).status,400);
  equal((await handle(req('/api/update?repo=private'))).status,400);
  equal((await handle(req('/api/update','{}',{'X-Workshop-Request':'replay'}))).status,400);
  equal((await handle(req())).status,503);
+ for(const [stage] of definitions)equal((await handle(req('/api/change/'+stage))).status,503);
  Deno.env.set('WORKSHOP_GITHUB_TOKEN','fake-dedicated-token');
  equal((await handle(req())).status,503); // A token alone cannot bypass the no-charge prerequisite.
  Deno.env.delete('WORKSHOP_GITHUB_TOKEN');

@@ -17,9 +17,9 @@ export async function maintain(){
   const run:any=await current(),limits=await rpc('workshop_state');
   demo=await observe(run,limits);
   if(!run.has_run||run.status!=='completed'||pendingUpdate(limits,run)||!demo.reset_at||Date.parse(demo.reset_at)>Date.now())return {reset:false,reset_at:demo.reset_at};
-  if(!await rpc('workshop_demo_claim_reset',{p_run:run.run_id}))return {reset:false};
  }
- await removeDemonstrationRuns();
+ if(!await rpc('workshop_demo_claim_reset',{p_run:demo.run_id}))return {reset:false};
+ await removeDemonstrationRuns(demo.run_id);
  await rpc('workshop_demo_finish_reset',{p_run:demo.run_id});
  return {reset:true};
 }

@@ -33,10 +33,10 @@ begin
  perform pg_advisory_xact_lock(260913);
  select * into d from workshop_private.cloud_demo where id;
  if d.run_id is distinct from p_run then return false; end if;
- if d.phase='cleaning' then return true; end if;
- if d.reset_at is null or d.reset_at>now() then return false; end if;
+ if d.phase='cleaning' and d.cleanup_until>now() then return false; end if;
+ if d.phase!='cleaning' and (d.reset_at is null or d.reset_at>now()) then return false; end if;
  if exists(select 1 from workshop_private.cloud_requests where finished_at is null and created_at>now()-interval '10 minutes') then return false; end if;
- update workshop_private.cloud_demo set phase='cleaning' where id;
+ update workshop_private.cloud_demo set phase='cleaning',cleanup_until=now()+interval '3 minutes' where id;
  return true;
 end; $$;
 
@@ -67,7 +67,7 @@ begin
  delete from workshop_private.cloud_cache;
  -- Retain today's request counters so resetting cannot bypass the daily limit.
  delete from workshop_private.cloud_requests where created_at<date_trunc('day',now());
- update workshop_private.cloud_demo set phase='idle',run_id=null,reset_at=null,
+ update workshop_private.cloud_demo set phase='idle',run_id=null,reset_at=null,cleanup_until=null,
    last_reset_at=now(),generation=generation+1 where id;
 end; $$;
 

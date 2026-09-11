@@ -45,6 +45,7 @@ try:
     assert good('select public.workshop_demo_claim_reset(101)') == 'f'
     good("update workshop_private.cloud_demo set reset_at=now()-interval '1 second';")
     assert good('select public.workshop_demo_claim_reset(101)') == 't'
+    assert good('select public.workshop_demo_claim_reset(101)') == 'f'
     assert sql(f"select public.workshop_reserve('{uuid.uuid4()}','data')").returncode != 0
     good('set role service_role;select public.workshop_demo_finish_reset(101)')
     assert good('select public.cpue_snapshot(2023)') == baseline

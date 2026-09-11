@@ -16,6 +16,7 @@ create table if not exists workshop_private.cloud_demo (
   generation integer not null default 0
 );
 insert into workshop_private.cloud_demo(id) values(true) on conflict do nothing;
+alter table workshop_private.cloud_demo add column if not exists cleanup_until timestamptz;
 revoke all on all tables in schema workshop_private from public, anon, authenticated;
 create or replace function public.workshop_reserve(p_id uuid, p_kind text) returns jsonb
 language plpgsql security definer set search_path='' as $$

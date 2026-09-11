@@ -51,13 +51,13 @@ export async function dispatch(version?:number){
  await ensureBranch();
  await github('actions/workflows/update.yml/dispatches','POST',{ref:DEMO_BRANCH,inputs:version?{data_version:String(version)}:{}});
 }
-export async function removeDemonstrationRuns(){
+export async function removeDemonstrationRuns(upToRun:number){
  // Fixed workflow and repository: no guest can choose a deletion target.
  // Delete pages from the front because removing a run changes pagination.
  for(let page=0;page<20;page++){
   const runs=(await json('actions/workflows/update.yml/runs?per_page=100')).workflow_runs;
   if(!runs.length)break;
-  if(runs.some((r:any)=>r.status!=='completed'||r.path!=='.github/workflows/update.yml'))throw Error('A workflow is active; cleanup will wait.');
+  if(runs.some((r:any)=>r.id>upToRun||r.status!=='completed'||r.path!=='.github/workflows/update.yml'))throw Error('A newer workflow is active; cleanup will wait.');
   for(const r of runs)await github('actions/runs/'+r.id,'DELETE',undefined,true);
  }
  const remaining=(await json('actions/workflows/update.yml/runs?per_page=1')).workflow_runs;

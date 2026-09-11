@@ -3,6 +3,10 @@ import csv
 import math
 from pathlib import Path
 import platform
+import json
+import time
+
+started = time.perf_counter()
 
 OUT = Path('outputs')
 indices = list(csv.DictReader((OUT / 'cpue.csv').open()))
@@ -60,3 +64,7 @@ for name, header, data in [
         w = csv.writer(f); w.writerow(header); w.writerows(data)
 (OUT / 'assessment-session.txt').write_text(f'Python {platform.python_version()}; standard library only; bounded golden-section optimisation\n')
 print('ASSESSMENT complete: two Schaefer fits; fixed r and initial depletion; no uncertainty propagation')
+
+manifest = json.loads((OUT / 'manifest.json').read_text())
+manifest.setdefault('stage_compute_seconds', {})['assessment'] = time.perf_counter() - started
+(OUT / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')

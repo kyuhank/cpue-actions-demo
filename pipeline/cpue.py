@@ -4,6 +4,9 @@ import json
 import math
 from pathlib import Path
 import platform
+import time
+
+started = time.perf_counter()
 
 OUT = Path('outputs')
 rows = list(csv.DictReader((OUT / 'sets.csv').open()))
@@ -52,3 +55,17 @@ with (OUT / 'cpue.csv').open('w', newline='') as f:
     + 'Vessel multipliers: ' + json.dumps(b) + '\n')
 (OUT / 'cpue-session.txt').write_text(f'Python {platform.python_version()}; standard library only\n')
 print(f'CPUE complete: two Poisson fits; {iteration + 1} iterations')
+
+diagnostics = []
+for choice, effects, weights, count in [('vessel_adjusted', a, b, len(years) + len(vessels) - 1), ('year_only', nominal, {v: 1 for v in vessels}, len(years))]:
+    deviance, pearson = 0.0, 0.0
+    for row in rows:
+        observed = float(row['catch_n'])
+        mu = float(row['hooks']) / 1000 * effects[int(row['year'])] * weights[row['vessel']]
+        deviance += 2 * ((observed * math.log(observed / mu) if observed else 0) - observed + mu)
+        pearson += (observed - mu) ** 2 / mu
+    diagnostics.append({'choice': choice, 'parameters': count, 'deviance': deviance, 'pearson_dispersion': pearson / (len(rows) - count)})
+(OUT / 'cpue-diagnostics.json').write_text(json.dumps(diagnostics, indent=2) + '\n')
+manifest = json.loads((OUT / 'manifest.json').read_text())
+manifest.setdefault('stage_compute_seconds', {})['cpue'] = time.perf_counter() - started
+(OUT / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')

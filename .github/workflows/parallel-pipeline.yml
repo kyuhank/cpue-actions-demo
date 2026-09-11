@@ -29,13 +29,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: kyuhank/cpue-actions-demo
           ref: ${{ inputs.analysis_ref || github.sha }}
       - name: Checkout source data
         if: ${{ inputs.data_repository != '' }}
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.data_repository }}
           ref: ${{ inputs.data_ref }}
@@ -46,7 +46,7 @@ jobs:
           TOY_DATA_COMMIT: ${{ inputs.data_ref || github.sha }}
           TOY_DATA_REPOSITORY: ${{ inputs.data_repository || github.repository }}
           TOY_SOURCE_DATABASE: ${{ inputs.data_repository && 'source-data/data/toy-fishery.sqlite' || 'data/toy-fishery.sqlite' }}
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: extract-${{ github.run_attempt }}
           path: outputs/
@@ -60,11 +60,11 @@ jobs:
     timeout-minutes: 8
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: kyuhank/cpue-actions-demo
           ref: ${{ inputs.analysis_ref || github.sha }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: extract-${{ github.run_attempt }}
           path: outputs/
@@ -72,7 +72,7 @@ jobs:
         run: sh scripts/container-stage.sh cpue
         env:
           TOY_CPUE_CHOICE: vessel_adjusted
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cpue_vessel-${{ github.run_attempt }}
           path: outputs/
@@ -86,11 +86,11 @@ jobs:
     timeout-minutes: 8
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: kyuhank/cpue-actions-demo
           ref: ${{ inputs.analysis_ref || github.sha }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: extract-${{ github.run_attempt }}
           path: outputs/
@@ -98,7 +98,7 @@ jobs:
         run: sh scripts/container-stage.sh cpue
         env:
           TOY_CPUE_CHOICE: year_only
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cpue_year-${{ github.run_attempt }}
           path: outputs/
@@ -112,11 +112,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: kyuhank/cpue-actions-demo
           ref: ${{ inputs.analysis_ref || github.sha }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: cpue_vessel-${{ github.run_attempt }}
           path: outputs/
@@ -124,7 +124,7 @@ jobs:
         run: sh scripts/container-stage.sh prepare_inputs
         env:
           TOY_CPUE_CHOICE: vessel_adjusted
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: prepare_vessel-${{ github.run_attempt }}
           path: outputs/
@@ -138,11 +138,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: kyuhank/cpue-actions-demo
           ref: ${{ inputs.analysis_ref || github.sha }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: cpue_year-${{ github.run_attempt }}
           path: outputs/
@@ -150,7 +150,7 @@ jobs:
         run: sh scripts/container-stage.sh prepare_inputs
         env:
           TOY_CPUE_CHOICE: year_only
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: prepare_year-${{ github.run_attempt }}
           path: outputs/
@@ -164,11 +164,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: kyuhank/cpue-actions-demo
           ref: ${{ inputs.analysis_ref || github.sha }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: prepare_vessel-${{ github.run_attempt }}
           path: outputs/
@@ -176,7 +176,7 @@ jobs:
         run: sh scripts/container-stage.sh assessment
         env:
           TOY_ASSESSMENT_CASE: assessment_vessel_ref
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: assessment_vessel_ref-${{ github.run_attempt }}
           path: outputs/
@@ -190,11 +190,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: kyuhank/cpue-actions-demo
           ref: ${{ inputs.analysis_ref || github.sha }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: prepare_vessel-${{ github.run_attempt }}
           path: outputs/
@@ -202,7 +202,7 @@ jobs:
         run: sh scripts/container-stage.sh assessment
         env:
           TOY_ASSESSMENT_CASE: assessment_vessel_high_m
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: assessment_vessel_high_m-${{ github.run_attempt }}
           path: outputs/
@@ -216,11 +216,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: kyuhank/cpue-actions-demo
           ref: ${{ inputs.analysis_ref || github.sha }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: prepare_year-${{ github.run_attempt }}
           path: outputs/
@@ -228,7 +228,7 @@ jobs:
         run: sh scripts/container-stage.sh assessment
         env:
           TOY_ASSESSMENT_CASE: assessment_year_ref
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: assessment_year_ref-${{ github.run_attempt }}
           path: outputs/
@@ -242,11 +242,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: kyuhank/cpue-actions-demo
           ref: ${{ inputs.analysis_ref || github.sha }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: prepare_year-${{ github.run_attempt }}
           path: outputs/
@@ -254,7 +254,7 @@ jobs:
         run: sh scripts/container-stage.sh assessment
         env:
           TOY_ASSESSMENT_CASE: assessment_year_high_m
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: assessment_year_high_m-${{ github.run_attempt }}
           path: outputs/
@@ -268,29 +268,29 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: kyuhank/cpue-actions-demo
           ref: ${{ inputs.analysis_ref || github.sha }}
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: assessment_vessel_ref-${{ github.run_attempt }}
           path: inputs/assessment_vessel_ref/
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: assessment_vessel_high_m-${{ github.run_attempt }}
           path: inputs/assessment_vessel_high_m/
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: assessment_year_ref-${{ github.run_attempt }}
           path: inputs/assessment_year_ref/
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: assessment_year_high_m-${{ github.run_attempt }}
           path: inputs/assessment_year_high_m/
       - name: Collect results and render comparisons
         run: sh scripts/container-stage.sh report
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: report-${{ github.run_attempt }}
           path: outputs/

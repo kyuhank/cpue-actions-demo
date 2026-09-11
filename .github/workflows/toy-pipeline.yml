@@ -54,14 +54,14 @@ jobs:
       TOY_DATABASE_VERSION: ${{ inputs.data_version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           repository: kyuhank/cpue-actions-demo
           ref: ${{ inputs.analysis_ref || github.sha }}
       - name: Checkout source data
         if: ${{ inputs.data_repository != '' }}
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           repository: ${{ inputs.data_repository }}
@@ -121,7 +121,7 @@ jobs:
         if: steps.plan.outputs.report == 'run'
         run: docker exec cpue-workshop python scripts/run_stage.py report
       - name: Save the complete workflow outputs
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: workflow-${{ github.run_attempt }}
           path: stages/

@@ -57,6 +57,7 @@ manifest = {
     "container_image": os.getenv("TOY_CONTAINER_IMAGE", "none; native Python"),
     "runner_image": os.getenv("ImageVersion", "local"),
     "rows": len(rows), "first_year": min(r[1] for r in rows), "last_year": max(r[1] for r in rows),
+    "extraction_outputs": {name: hashlib.sha256((OUT / name).read_bytes()).hexdigest() for name in ('sets.csv', 'catch.csv')},
     "extraction": {"input_rows": input_rows, "retained_rows": len(rows),
         "excluded_rows": input_rows - len(rows), "vessels": len({r[2] for r in rows}),
         "zero_catch_sets": sum(r[4] == 0 for r in rows), "total_hooks": sum(r[3] for r in rows),

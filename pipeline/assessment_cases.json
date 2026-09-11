@@ -1,0 +1,6 @@
+[
+  {"key": "assessment_vessel_ref", "choice": "vessel_adjusted", "setting": "reference", "r": 0.35},
+  {"key": "assessment_vessel_high_r", "choice": "vessel_adjusted", "setting": "higher_r", "r": 0.45},
+  {"key": "assessment_year_ref", "choice": "year_only", "setting": "reference", "r": 0.35},
+  {"key": "assessment_year_high_r", "choice": "year_only", "setting": "higher_r", "r": 0.45}
+]

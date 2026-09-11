@@ -108,11 +108,11 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
-  assessment:
-    name: 03 Assessment
-    needs: [cpue_vessel, cpue_year]
+  prepare_vessel:
+    name: '03 Prepare inputs: vessel'
+    needs: cpue_vessel
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -122,25 +122,23 @@ jobs:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: cpue_vessel-${{ github.run_attempt }}
-          path: inputs/cpue_vessel/
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: cpue_year-${{ github.run_attempt }}
-          path: inputs/cpue_year/
-      - name: Fit the toy biomass models
-        run: sh scripts/container-stage.sh assessment
+          path: outputs/
+      - name: Check and prepare the assessment input
+        run: sh scripts/container-stage.sh prepare_inputs
+        env:
+          TOY_CPUE_CHOICE: vessel_adjusted
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: assessment-${{ github.run_attempt }}
+          name: prepare_vessel-${{ github.run_attempt }}
           path: outputs/
           retention-days: 30
           if-no-files-found: error
 
-  report:
-    name: 04 Report
-    needs: assessment
+  prepare_year:
+    name: '03 Prepare inputs: year'
+    needs: cpue_year
     runs-on: ubuntu-24.04
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -149,9 +147,151 @@ jobs:
           ref: ${{ inputs.analysis_ref || github.sha }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: assessment-${{ github.run_attempt }}
+          name: cpue_year-${{ github.run_attempt }}
           path: outputs/
-      - name: Render the draft report
+      - name: Check and prepare the assessment input
+        run: sh scripts/container-stage.sh prepare_inputs
+        env:
+          TOY_CPUE_CHOICE: year_only
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: prepare_year-${{ github.run_attempt }}
+          path: outputs/
+          retention-days: 30
+          if-no-files-found: error
+
+  assessment_vessel_ref:
+    name: '04 Assessment: vessel, r=0.35'
+    needs: prepare_vessel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: prepare_vessel-${{ github.run_attempt }}
+          path: outputs/
+      - name: Fit this assessment case
+        run: sh scripts/container-stage.sh assessment
+        env:
+          TOY_ASSESSMENT_CASE: assessment_vessel_ref
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: assessment_vessel_ref-${{ github.run_attempt }}
+          path: outputs/
+          retention-days: 30
+          if-no-files-found: error
+
+  assessment_vessel_high_r:
+    name: '04 Assessment: vessel, r=0.45'
+    needs: prepare_vessel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: prepare_vessel-${{ github.run_attempt }}
+          path: outputs/
+      - name: Fit this assessment case
+        run: sh scripts/container-stage.sh assessment
+        env:
+          TOY_ASSESSMENT_CASE: assessment_vessel_high_r
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: assessment_vessel_high_r-${{ github.run_attempt }}
+          path: outputs/
+          retention-days: 30
+          if-no-files-found: error
+
+  assessment_year_ref:
+    name: '04 Assessment: year, r=0.35'
+    needs: prepare_year
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: prepare_year-${{ github.run_attempt }}
+          path: outputs/
+      - name: Fit this assessment case
+        run: sh scripts/container-stage.sh assessment
+        env:
+          TOY_ASSESSMENT_CASE: assessment_year_ref
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: assessment_year_ref-${{ github.run_attempt }}
+          path: outputs/
+          retention-days: 30
+          if-no-files-found: error
+
+  assessment_year_high_r:
+    name: '04 Assessment: year, r=0.45'
+    needs: prepare_year
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: prepare_year-${{ github.run_attempt }}
+          path: outputs/
+      - name: Fit this assessment case
+        run: sh scripts/container-stage.sh assessment
+        env:
+          TOY_ASSESSMENT_CASE: assessment_year_high_r
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: assessment_year_high_r-${{ github.run_attempt }}
+          path: outputs/
+          retention-days: 30
+          if-no-files-found: error
+
+  report:
+    name: 05 Report
+    needs: [assessment_vessel_ref, assessment_vessel_high_r, assessment_year_ref, assessment_year_high_r]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: assessment_vessel_ref-${{ github.run_attempt }}
+          path: inputs/assessment_vessel_ref/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: assessment_vessel_high_r-${{ github.run_attempt }}
+          path: inputs/assessment_vessel_high_r/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: assessment_year_ref-${{ github.run_attempt }}
+          path: inputs/assessment_year_ref/
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: assessment_year_high_r-${{ github.run_attempt }}
+          path: inputs/assessment_year_high_r/
+      - name: Collect results and render comparisons
         run: sh scripts/container-stage.sh report
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -159,3 +299,4 @@ jobs:
           path: outputs/
           retention-days: 30
           if-no-files-found: error
+

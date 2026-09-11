@@ -11,6 +11,9 @@ import time
 started = time.perf_counter()
 
 OUT = Path('outputs')
+extraction_record = json.loads((OUT / 'manifest.json').read_text())
+if hashlib.sha256((OUT / 'sets.csv').read_bytes()).hexdigest() != extraction_record['extraction_outputs']['sets.csv']:
+    raise SystemExit('Extracted CPUE records differ from their recorded checksum')
 choice_requested = os.getenv('TOY_CPUE_CHOICE', '')
 if choice_requested not in ('', 'vessel_adjusted', 'year_only'):
     raise SystemExit('Unknown CPUE choice')

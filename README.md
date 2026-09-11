@@ -1,14 +1,14 @@
 # CPUE workflow demo
 
-Synthetic longline records → extraction → two CPUE choices → toy Schaefer fits → report.
+Synthetic records → extraction → two CPUE choices → input preparation → four toy assessments → report.
 
 [Open the workshop demo](https://kyuhank.github.io/cpue-actions-demo/).
 During a hosted session, visitors can start the real GitHub workflow without an account.
 The browser companion also runs the calculations locally.
 
 New data in [cpue-toy-data](https://github.com/kyuhank/cpue-toy-data) trigger
-five GitHub jobs using this repository’s pinned workflow. Two CPUE jobs run in
-parallel; assessment waits for both and checks their inputs before fitting.
+ten GitHub jobs using this repository’s pinned workflow. Each CPUE branch prepares
+its input and runs two assessment settings. The report checks and collects all four results.
 Kflow2 is a separate private orchestration app; its source is not included here.
 
 ```bash

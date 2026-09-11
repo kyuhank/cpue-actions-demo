@@ -2,6 +2,17 @@ name: Data to report
 run-name: "Toy CPUE · ${{ github.event_name }} · ${{ github.sha }}"
 
 on:
+  workflow_call:
+    inputs:
+      data_repository:
+        required: true
+        type: string
+      data_ref:
+        required: true
+        type: string
+      analysis_ref:
+        required: true
+        type: string
   push:
     branches: [main]
     paths: ['data/**', 'pipeline/**', '.github/workflows/toy-pipeline.yml']
@@ -22,8 +33,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
+      - name: Checkout source data
+        if: ${{ inputs.data_repository != '' }}
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: ${{ inputs.data_repository }}
+          ref: ${{ inputs.data_ref }}
+          path: source-data
       - name: Extract a checked snapshot
         run: python3 pipeline/extract.py
+        env:
+          TOY_DATA_REPOSITORY: ${{ inputs.data_repository || github.repository }}
+          TOY_SOURCE_DATABASE: ${{ inputs.data_repository && 'source-data/data/toy-fishery.sqlite' || 'data/toy-fishery.sqlite' }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: extract-${{ github.run_attempt }}
@@ -39,6 +63,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
       - uses: r-lib/actions/setup-r@465b7d8e732ca3921382b1674c59bada9cbf3399 # v2
         with:
           r-version: '4.5.1'
@@ -64,6 +91,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
       - uses: r-lib/actions/setup-r@465b7d8e732ca3921382b1674c59bada9cbf3399
         with:
           r-version: '4.5.1'
@@ -89,6 +119,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
       - uses: quarto-dev/quarto-actions/setup@8a96df13519ee81fd526f2dfca5962811136661b # v2
         with:
           version: '1.7.31'

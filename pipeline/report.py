@@ -81,6 +81,8 @@ A Schaefer biomass model uses total annual removals and each CPUE series. Growth
 | Recorded item | Value |
 |:--|:--|
 | Source snapshot SHA-256 | `{manifest['source_sha256']}` |
+| Data repository | `{manifest['source_repository']}` |
+| Data commit | `{manifest['source_git_commit']}` |
 | SQL query SHA-256 | `{manifest['query_sha256']}` |
 | Code commit | `{commit}` |
 | Workflow run / attempt | `{manifest['github_run_id']} / {manifest['github_run_attempt']}` |
@@ -101,4 +103,3 @@ manifest["stages"] = ["extract", "cpue", "assessment", "report"]
 checksums = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(OUT.iterdir()) if p.is_file() and p.name != "checksums.json"}
 (OUT / "checksums.json").write_text(json.dumps(checksums, indent=2) + "\n")
 print("REPORT complete: rendered HTML, model comparisons, manifest and checksums.")
-

@@ -57,9 +57,8 @@ validated database snapshot becoming available inside its authorized environment
 
 ## Watch in local Kflow2
 
-The `bridge/` source adapter displays real GitHub Actions status, dependencies,
-completed logs and artifacts in a separate local Kflow2 workspace. GitHub Actions
-owns execution and dependency scheduling; Kflow2 supplies the monitoring view.
-This demonstration does not add a general Actions execution backend to Kflow2.
-
-Detailed launcher and rehearsal instructions are supplied in `docs/demo.md`.
+A separate **private local presentation copy** can display the real GitHub
+Actions status, dependencies, completed logs and artifacts. GitHub Actions owns
+execution and dependency scheduling; Kflow2 supplies the monitoring view.
+Kflow2 source and its connector are not distributed in this public repository.
+The public workflow is fully runnable without Kflow2.

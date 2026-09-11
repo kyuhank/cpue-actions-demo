@@ -11,8 +11,10 @@ from urllib.request import Request, urlopen
 def rpc(url, key, name, body):
     if not re.fullmatch(r'https://[a-z0-9]+\.supabase\.co', url):
         raise ValueError('Use the project HTTPS URL')
-    request = Request(url + '/rest/v1/rpc/' + name, data=json.dumps(body).encode(),
-                      headers={'apikey': key, 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'})
+    headers = {'apikey': key, 'Content-Type': 'application/json'}
+    if key.startswith('eyJ'):
+        headers['Authorization'] = 'Bearer ' + key
+    request = Request(url + '/rest/v1/rpc/' + name, data=json.dumps(body).encode(), headers=headers)
     with urlopen(request, timeout=20) as response:
         raw = response.read(4 * 1024 * 1024 + 1)
     if len(raw) > 4 * 1024 * 1024:

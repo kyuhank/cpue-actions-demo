@@ -2,11 +2,13 @@
 
 Prepared for a new project; this connection is inactive until configured.
 
-1. Create a **Free** Supabase project. Run `schema.sql`, then `seed.sql` in its SQL Editor. These contain wholly synthetic data through 2023.
-2. In `kyuhank/cpue-toy-data`, add Actions secrets `SUPABASE_URL` and `SUPABASE_ANON_KEY` (the project's legacy `anon` JWT key). The workflow then reads versioned database snapshots instead of the repository's fallback database.
-3. Deploy `dispatch-workshop` with `supabase functions deploy dispatch-workshop --project-ref PROJECT_REF`. Configure its secrets: `WORKSHOP_WEBHOOK_SECRET` (a random value) and `WORKSHOP_GITHUB_TOKEN` (a fine-grained token limited to **Actions: write** on `kyuhank/cpue-toy-data`). Keep these out of source files.
-4. Add a Database Webhook on `public.cpue_releases`, **INSERT** only, pointing to that function's HTTPS URL. Set header `x-workshop-webhook` to the same webhook secret.
-5. Configure the private presentation host using its Supabase setup note. The slide button appends a synthetic year; the database release triggers extraction, analyses, synthesis and reporting.
+The private presentation host has a setup command that checks the Free plan, creates the project and installs these files. This public directory contains only synthetic data and the database contract.
+
+`schema.sql` and `seed.sql` establish the immutable baseline through 2023. `snapshot.py` downloads a particular database version into a deterministic SQLite snapshot for GitHub Actions. It accepts current publishable keys and legacy anon keys; writing requires a private server key.
+
+The slide button appends one year. A release INSERT calls `dispatch-workshop`, which finds the active workshop session and notifies its authenticated, bounded relay. The private host dispatches only `kyuhank/cpue-toy-data/update.yml`, then GitHub reads the selected snapshot and runs extraction through reporting. GitHub credentials stay on the host. Sharing must be open; a stopped host cannot dispatch new jobs.
+
+Connection values: the data repository's Actions secrets are `SUPABASE_URL` and `SUPABASE_ANON_KEY`. Edge Function secrets are `WORKSHOP_WEBHOOK_SECRET` and `WORKSHOP_RELAY_SECRET`. No keys belong in this repository or the distributed slides.
 
 Snapshots are append-only. The extraction artifact also retains the exact SQLite snapshot used by the run. CPUE settings remain versioned in GitHub. Length compositions are an example of additional production inputs; this toy fits catch and CPUE only.
 

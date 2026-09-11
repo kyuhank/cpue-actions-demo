@@ -1,10 +1,9 @@
-"""Build Quarto report source from real outputs of the preceding jobs (stdlib only)."""
+"""Build a standalone HTML report from actual outputs; no document-tool installation."""
 import csv
 import hashlib
 import html
 import json
 from pathlib import Path
-import subprocess
 
 OUT = Path("outputs")
 manifest = json.loads((OUT / "manifest.json").read_text())
@@ -36,70 +35,25 @@ def plot(field, filename, label):
 
 plot("observed_index", "cpue.svg", "Standardised CPUE / first year")
 plot("B_over_K", "biomass.svg", "Toy biomass / carrying capacity")
-table = "\n".join(f"| {labels[x['choice']]} | {float(x['final_index']):.3f} | {float(x['final_B_over_K']):.3f} | {float(x['log_index_SSE']):.3f} |" for x in rows)
-commit = manifest['git_commit']
-content = f'''---
-title: "From a data update to a reviewable result"
-subtitle: "Synthetic longline workflow · draft for review"
-format:
-  html:
-    embed-resources: true
-    toc: false
-    theme: cosmo
-    max-width: 1100px
----
-
-::: {{.callout-note}}
-**Wholly synthetic data · toy models · no management advice.** Both CPUE choices and both biomass models were fitted in this run. The estimates illustrate the consequences of analysis choices.
-:::
-
-**Data through {manifest['last_year']} · {manifest['rows']:,} sets · Run {manifest['github_run_id']}, attempt {manifest['github_run_attempt']}**
-
-## Same data, two recorded choices
-
-::: {{.columns}}
-::: {{.column width="50%"}}
-![](cpue.svg)
-:::
-::: {{.column width="50%"}}
-![](biomass.svg)
-:::
-:::
-
-| CPUE choice | Latest CPUE / first year | Latest toy B/K | Log-index SSE |
-|:--|--:|--:|--:|
-{table}
-
-The toy fleet shifts toward vessels with higher catchability. The two specifications consequently give different trends; this is a designed illustration, not evidence for a preferred specification in a real fishery. Both CPUE fits use a Poisson log link, an effort offset, all zero catches and a common first-year scaling. Predictions average equally across the four toy vessels.
-
-## What the toy assessment assumes
-
-A Schaefer biomass model uses total annual removals and each CPUE series. Growth r = 0.35 and initial B/K = 1 are fixed; carrying capacity K and catchability q are fitted by minimising squared log-index residuals. This is a deterministic teaching example, with no process error or uncertainty propagation, and is not the BET MFCL assessment. Poor fit in the alternative is visible in its SSE. A production analysis would review diagnostics, model assumptions, uncertainty and sensitivities before use.
-
-## Trace this result
-
-| Recorded item | Value |
-|:--|:--|
-| Source snapshot SHA-256 | `{manifest['source_sha256']}` |
-| Data repository | `{manifest['source_repository']}` |
-| Data commit | `{manifest['source_git_commit']}` |
-| SQL query SHA-256 | `{manifest['query_sha256']}` |
-| Code commit | `{commit}` |
-| Workflow run / attempt | `{manifest['github_run_id']} / {manifest['github_run_attempt']}` |
-| Python / SQLite | `{manifest['python']} / {manifest['sqlite']}` |
-| Runner image | `{manifest['runner_image']}` |
-
-`manifest.json`, the SQL, `choices.json`, model diagnostics, R session records and `checksums.json` travel with this report. GitHub-hosted runner images change; fixed tool versions and recorded sessions improve repeatability but are not a claim of bitwise reproducibility across machines.
-
-## Review remains a scientific step
-
-Automatic execution produces a draft. Analysts evaluate the choices and diagnostics; data custodians approve any release of protected outputs. This demonstration contains only synthetic data and does not implement a secure research environment.
-'''
-(OUT / "report.qmd").write_text(content)
-subprocess.run(["quarto", "render", "report.qmd", "--output", "report.html"], cwd=OUT, check=True)
-(OUT / "quarto-version.txt").write_text(subprocess.check_output(["quarto", "--version"], text=True))
-manifest["stages"] = ["extract", "cpue", "assessment", "report"]
-(OUT / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-checksums = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(OUT.iterdir()) if p.is_file() and p.name != "checksums.json"}
-(OUT / "checksums.json").write_text(json.dumps(checksums, indent=2) + "\n")
-print("REPORT complete: rendered HTML, model comparisons, manifest and checksums.")
+manifest['stages'] = ['extract', 'cpue', 'assessment', 'report']
+manifest['report_format'] = 'standalone HTML; Python standard library'
+(OUT / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+values = ''.join('<tr><td>' + labels[x['choice']] + '</td>' + ''.join(f'<td>{float(x[k]):.3f}</td>' for k in ('final_index', 'final_B_over_K', 'log_index_SSE')) + '</tr>' for x in rows)
+records = [('Data repository', manifest['source_repository']), ('Data commit', manifest['source_git_commit']), ('Code commit', manifest['git_commit']), ('Snapshot SHA-256', manifest['source_sha256']), ('SQL SHA-256', manifest['query_sha256']), ('Run / attempt', f"{manifest['github_run_id']} / {manifest['github_run_attempt']}"), ('Python / SQLite', f"{manifest['python']} / {manifest['sqlite']}"), ('Runner image', manifest['runner_image'])]
+trail = ''.join(f'<tr><th>{name}</th><td><code>{html.escape(str(value))}</code></td></tr>' for name, value in records)
+plots = ''.join('<div>' + (OUT / file).read_text() + '</div>' for file in ('cpue.svg', 'biomass.svg'))
+content = f'''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>From a data update to a reviewable result</title>
+<style>*{{box-sizing:border-box}}body{{margin:0;background:#fafcfc;color:#001743;font:17px/1.55 Arial,sans-serif}}main{{max-width:1120px;margin:auto;padding:45px 35px}}h1{{font:44px/1.15 Georgia,serif;margin:15px 0 25px}}h2{{font-size:26px;margin:35px 0 16px}}.eyebrow{{color:#0085ca;font-size:13px;letter-spacing:2px}}.notice{{background:#eaf5f8;border-left:4px solid #0085ca;padding:15px 20px;color:#405b70}}.meta{{font-weight:bold;margin:25px 0}}.plots{{display:grid;grid-template-columns:1fr 1fr;gap:22px}}.plots svg{{width:100%;height:auto}}table{{border-collapse:collapse;width:100%;margin:20px 0}}th,td{{text-align:left;padding:12px;border-bottom:1px solid #d8e5ea}}code{{font-size:13px;overflow-wrap:anywhere}}.trail th{{width:195px}}p{{color:#536b7b}}@media(max-width:750px){{.plots{{grid-template-columns:1fr}}h1{{font-size:32px}}main{{padding:25px 18px}}}}</style>
+<main><div class="eyebrow">SYNTHETIC LONGLINE WORKFLOW · DRAFT FOR REVIEW</div><h1>From a data update<br>to a reviewable result.</h1>
+<div class="notice">Wholly synthetic data and toy models. No management advice.</div>
+<div class="meta">Data through {manifest['last_year']} · {manifest['rows']:,} sets · Run {manifest['github_run_id']}, attempt {manifest['github_run_attempt']}</div>
+<h2>Same data, two recorded choices</h2><div class="plots">{plots}</div><table><tr><th>CPUE choice</th><th>Latest CPUE / first year</th><th>Latest toy B/K</th><th>Log-index SSE</th></tr>{values}</table>
+<p>The generated fleet shifts toward vessels with higher catchability. Including or omitting a vessel effect changes the index. Both choices use a Poisson log link, an effort offset, zero catches and equal vessel prediction weights. Each index is scaled to its first year.</p>
+<h2>What the toy assessment assumes</h2><p>A Schaefer model fits carrying capacity K and catchability q to each index and annual removals. Growth r = 0.35 and initial B/K = 1 are fixed. This deterministic example has no process error or uncertainty propagation and is not the BET MFCL assessment.</p>
+<h2>Trace this result</h2><table class="trail">{trail}</table>
+<p>The manifest, choices, diagnostics, runtime records and checksums travel with the report. The Python fits were checked against the reference R implementations. GitHub runner images change; recorded versions support reruns without claiming identical results across every machine.</p>
+<h2>Review remains a scientific step</h2><p>Automatic execution produces a draft. Analysts review model choices, diagnostics, uncertainty and sensitivities. Data custodians approve releases of protected outputs. This public toy example does not implement a secure research environment.</p></main></html>'''
+(OUT / 'report.html').write_text(content)
+checksums = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(OUT.iterdir()) if p.is_file() and p.name != 'checksums.json'}
+(OUT / 'checksums.json').write_text(json.dumps(checksums, indent=2) + '\n')
+print('REPORT complete: standalone HTML, model comparisons, manifest and checksums')

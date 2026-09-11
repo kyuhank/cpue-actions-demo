@@ -1,4 +1,4 @@
-// A database release notifies the bounded presentation host. GitHub keys stay there.
+// Authenticate database events; use the restricted cloud credential when enabled.
 export async function handle(request: Request) {
   const expected = Deno.env.get("WORKSHOP_WEBHOOK_SECRET");
   if (request.method !== "POST" || !expected || request.headers.get("x-workshop-webhook") !== expected)
@@ -13,6 +13,18 @@ export async function handle(request: Request) {
   if (event?.type !== "INSERT" || event.schema !== "public" || event.table !== "cpue_releases" ||
       !Number.isInteger(version) || version < 2024 || version > 2035)
     return new Response("Unknown workshop event", { status: 400 });
+  if (Deno.env.get("WORKSHOP_GITHUB_TOKEN")) {
+    if(Deno.env.get("WORKSHOP_ZERO_BUDGET_CONFIRMED") !== "true")
+      return new Response("Cloud execution is disabled", {status:503});
+    try {
+      const {rpc} = await import("../workshop-api/database.ts");
+      const {github} = await import("../workshop-api/github.ts");
+      if(!await rpc("workshop_dispatch_claim",{p_version:version}))
+        return new Response("Release already requested",{status:200});
+      await github("actions/workflows/update.yml/dispatches","POST",{ref:"main",inputs:{data_version:String(version)}});
+      return new Response("Workflow requested",{status:202});
+    } catch {return new Response("Dispatch was not confirmed; inspect the release and workflow before retrying",{status:502});}
+  }
   const relaySecret = Deno.env.get("WORKSHOP_RELAY_SECRET");
   if (!relaySecret) return new Response("Workshop connection is not configured", { status: 503 });
   try {

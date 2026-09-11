@@ -16,6 +16,9 @@ with tempfile.TemporaryDirectory(prefix='cpue-incremental-') as folder:
     (root / 'config').mkdir()
     config = root / 'config/stages.json'
     config.write_text('{}')
+    release = {'version': 2023, 'quality_check': {'accepted': True, 'errors': [], 'rule_version': 1,
+        'rows_received': 198, 'rules_sha256': 'd'*64, 'checks': ['positive effort; zero catches retained']}}
+    (root / 'data/toy-fishery.release.json').write_text(json.dumps(release))
     env = {**os.environ, 'TOY_CODE_COMMIT': 'a'*40, 'TOY_DATA_COMMIT': 'b'*40,
            'TOY_DATA_REPOSITORY': 'kyuhank/cpue-toy-data', 'TOY_SOURCE_PROVIDER': 'supabase',
            'TOY_SOURCE_VERSION': '2023', 'TOY_DEMO_PACE_SECONDS': '0', 'GITHUB_RUN_ID': '1'}
@@ -48,6 +51,9 @@ with tempfile.TemporaryDirectory(prefix='cpue-incremental-') as folder:
     assert manifest['configuration']['stage_settings']['cpue_vessel'] == {'min_hooks': 2000}
     assert manifest['extraction_run_id'] == '1' and manifest['github_run_id'] == '2'
     assert hashlib.sha256((out / 'source.sqlite').read_bytes()).hexdigest() == manifest['source_sha256']
+    assert manifest['data_release'] == release
+    assert json.loads((out / 'source-release.json').read_text()) == release
+    assert release['quality_check']['rules_sha256'] in (out / 'report.html').read_text()
     for name, checksum in manifest['extraction_queries'].items():
         assert (out / name).read_bytes() == (root / 'pipeline' / name).read_bytes()
         assert hashlib.sha256((out / name).read_bytes()).hexdigest() == checksum

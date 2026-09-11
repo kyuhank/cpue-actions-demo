@@ -1,6 +1,6 @@
 # Supabase Free setup
 
-The demonstration uses a Free Supabase project in Sydney. [Release 2024 completed the full workflow](https://github.com/kyuhank/cpue-toy-data/actions/runs/34645434946).
+The demonstration uses a Free Supabase project in Sydney. [QC-approved release 2025 completed the full workflow](https://github.com/kyuhank/cpue-toy-data/actions/runs/34648459089).
 
 The private presentation host has a setup command that checks the Free plan, creates the project and installs these files. This public directory contains only synthetic data and the database contract.
 
@@ -12,6 +12,9 @@ Connection values: the data repository's Actions secrets are `SUPABASE_URL` and 
 
 Snapshots are append-only. The extraction artifact retains the exact SQLite snapshot, release metadata, SQL files and QC record used by the run. CPUE settings remain versioned in GitHub. Length compositions are an example of additional production inputs; this toy fits catch and CPUE only.
 
-Rehearse after setup: confirm a new release produces a GitHub run named **Database version 2024** and a report with the same data version. A failed webhook can be retried by dispatching `update.yml` with that `data_version`.
+Rehearse after setup: confirm a new release produces a GitHub run named **Database version YEAR** and a report with the same data version. A failed webhook can be retried by dispatching `update.yml` with that `data_version`.
 
 Free projects pause after one week of inactivity; resume the project before presenting. [Plan](https://supabase.com/pricing) · [Database Webhooks](https://supabase.com/docs/guides/database/webhooks)
+
+
+The optional `workshop-api` Edge Function supplies fixed anonymous demo controls and read-only run/output views. `cloud-control.sql` enforces 60 shared requests per UTC day, a 30-second interval and request deduplication. A dedicated fine-grained token must be restricted to `kyuhank/cpue-toy-data` with Contents and Actions read/write only. Cloud writes require the owner to confirm an Actions $0 budget with Stop usage enabled. Store the token only as `WORKSHOP_GITHUB_TOKEN` in Edge Function secrets, alongside `WORKSHOP_ZERO_BUDGET_CONFIRMED=true`. Never use a general account credential. The backend uses the existing Free Supabase project; no paid services are required.

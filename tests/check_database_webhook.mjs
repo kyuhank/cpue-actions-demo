@@ -36,5 +36,6 @@ for (const url of ['https://attacker.example','http://workshop-test.trycloudflar
 pointer.url='https://workshop-test.trycloudflare.com';pointer.expires='2000-01-01';calls=[];
 assert.equal((await handle(request())).status,503);
 assert.equal(calls.length,1);
-assert(!source.toString().includes('WORKSHOP_GITHUB_TOKEN'));
-console.log('Database webhook: authenticated events, exact release contract, active fixed host, no GitHub credential or redirects.');
+// The local relay remains available while the separate cloud credential is unset.
+assert(source.toString().includes('WORKSHOP_ZERO_BUDGET_CONFIRMED'));
+console.log('Database webhook: authenticated events, exact release contract, local fallback uses the fixed active host without passing GitHub credentials; redirects are rejected.');

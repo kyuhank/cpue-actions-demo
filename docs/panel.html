@@ -1,9 +1,9 @@
 <!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Live GitHub workflow</title>
-<link rel="stylesheet" href="/panel.css"></head><body><main>
+<link rel="stylesheet" href="./panel.css"></head><body><main>
 <div class="top"><div class="brand"><span class="gh">GH</span><strong>GitHub Actions</strong><a class="run" id="run-link" target="_blank" rel="noopener">Connecting…</a></div><div class="controls"><button id="invalid" class="change quality" hidden disabled>Test invalid data</button><button id="change" class="change" disabled>Update selected job</button><button id="publish" class="publish" disabled>+ Add one synthetic year</button></div></div>
 <div class="event-trail"><span class="event" id="event-data">Data / setting commit</span><span>→</span><span class="event" id="event-qc">Quality check</span><span id=event-signal>→ push</span><a id="event-commit" target="_blank" rel="noopener"></a><span>→</span><span class="event" id="event-run">GitHub workflow</span><span>→</span><span class="event" id="event-output">Versioned outputs</span></div>
 <div class="setup"><span id="setup-runner">○ Runner</span><span id="setup-code">○ Check out code + data</span><span id="setup-docker">○ Pull Docker image</span><span id="setup-analysis">○ Run analyses</span><span id="setup-save">○ Save outputs</span><span id="execution" class="execution"></span></div>
 <div class="chain" id="chain"></div>
 <div class="live-strip"><div class="status-box"><span id="run-state" class="pill">Checking GitHub</span><b id="message" role="status">Connecting to the runner…</b><p id="progress">Actual states from GitHub Actions.</p></div><div class="console"><div class="console-head"><span id="console-title">GITHUB EXECUTION RECORD</span><a id="console-link" target="_blank" rel="noopener">View run ↗</a></div><pre id="console-lines">Waiting for the GitHub record…</pre></div></div>
 <div class="footer"><span id="identity">Source: GitHub Actions API</span><span class="pace">4 s presentation pause per executed stage</span><span id="verified"></span></div>
-</main><script src="/panel.js"></script></body></html>
+</main><script src="./cloud.js"></script><script src="./panel.js"></script></body></html>

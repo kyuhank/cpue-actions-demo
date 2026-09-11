@@ -1,7 +1,7 @@
 
 const $=id=>document.getElementById(id);let latest='',loaded='';
 if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');
-async function refresh(){try{
+async function refresh(){if(window.workshopActive===false)return;try{
  const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw Error('Local status unavailable');const d=await r.json();if(!d.ready)throw Error('No verified run available');
  const id=d.stages.find(s=>s.key==='report').source_id,complete=d.status==='completed'&&d.conclusion==='success'&&d.stages.every(s=>s.status==='completed');latest=id;
  $('stages').textContent=d.stages.filter(s=>s.status==='completed').length+' / '+d.stages.length+' jobs complete';$('run').href=d.run_url;
@@ -12,6 +12,9 @@ async function refresh(){try{
   $('years').textContent=m.first_year+'–'+m.last_year;$('rows').textContent=m.rows.toLocaleString()+' synthetic longline sets';$('data').textContent=m.source_provider==='supabase'?'Release '+m.source_version:m.source_git_commit.slice(0,12);$('data').href=m.source_provider==='supabase'?'/api/output?job='+encodeURIComponent(id)+'&file=manifest.json':'https://github.com/'+m.source_repository+'/commit/'+m.source_git_commit;$('settings').textContent=settingsCommit.slice(0,12);$('settings').href='https://github.com/kyuhank/cpue-toy-data/commit/'+settingsCommit;$('code').textContent=m.git_commit.slice(0,12);$('code').href='https://github.com/kyuhank/cpue-actions-demo/commit/'+m.git_commit;$('report').href='/api/output?job='+encodeURIComponent(id)+'&file=report.html';loaded=id;$('report').classList.remove('disabled');
  }
 }catch(e){$('message').textContent=e.message;}}
+$('report').onclick=async event=>{event.preventDefault();if($('report').classList.contains('disabled'))return;try{const response=await fetch($('report').getAttribute('href'));if(!response.ok)throw Error('Report unavailable');$('report-content').srcdoc=await response.text();$('report-view').hidden=false;}catch(e){$('message').textContent=e.message;}};
+$('data').onclick=async event=>{const href=$('data').getAttribute('href')||'';if(!href.includes('/api/output')&&!href.includes('/api/output'))return;event.preventDefault();try{const response=await fetch(href);if(!response.ok)throw Error('Version record unavailable');const text=JSON.stringify(await response.json(),null,2).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');$('report-content').srcdoc='<html><meta charset="utf-8"><style>body{font:14px monospace;color:#001743;padding:18px}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><h2>Recorded data and analysis versions</h2><pre>'+text+'</pre></html>';$('report-view').hidden=false;}catch(e){$('message').textContent=e.message;}};
+$('back').onclick=()=>{$('report-view').hidden=true;};
 refresh();setInterval(refresh,4000);
 async function heartbeat(){try{const r=await fetch('/api/presentation-info',{cache:'no-store'});if(r.ok&&(await r.json()).presentation==='cpue-workshop'&&parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');}catch(e){}}
 heartbeat();setInterval(heartbeat,4000);

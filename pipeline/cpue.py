@@ -7,6 +7,9 @@ import os
 from pathlib import Path
 import platform
 import time
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from settings import stage_settings
 
 started = time.perf_counter()
 
@@ -18,6 +21,9 @@ choice_requested = os.getenv('TOY_CPUE_CHOICE', '')
 if choice_requested not in ('', 'vessel_adjusted', 'year_only'):
     raise SystemExit('Unknown CPUE choice')
 rows = list(csv.DictReader((OUT / 'sets.csv').open()))
+minimum = stage_settings().get({'vessel_adjusted': 'cpue_vessel', 'year_only': 'cpue_year'}.get(choice_requested, ''), {}).get('min_hooks', 0)
+input_count = len(rows)
+rows = [row for row in rows if float(row['hooks']) >= minimum]
 years = sorted({int(r['year']) for r in rows})
 vessels = sorted({r['vessel'] for r in rows})
 exposure = {(y, v): 0.0 for y in years for v in vessels}
@@ -85,6 +91,7 @@ manifest = json.loads((OUT / 'manifest.json').read_text())
 job_key = {'vessel_adjusted': 'cpue_vessel', 'year_only': 'cpue_year'}.get(choice_requested, 'cpue')
 manifest.setdefault('stage_compute_seconds', {})[job_key] = time.perf_counter() - started
 manifest['cpue_runs'] = {x['choice']: {'job': os.getenv('GITHUB_JOB', job_key),
+    'min_hooks': minimum, 'sets_used': len(rows), 'sets_excluded': input_count - len(rows),
     'index_sha256': hashlib.sha256((OUT / 'cpue.csv').read_bytes()).hexdigest()}
     for x in diagnostics}
 (OUT / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')

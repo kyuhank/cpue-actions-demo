@@ -5,8 +5,12 @@ import hashlib
 import json
 from pathlib import Path
 import shutil
+import sys
+import os
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from settings import assessment_cases
 
-cases = json.loads(Path(__file__).with_name('assessment_cases.json').read_text())
+cases = assessment_cases()
 folders = [Path('inputs') / case['key'] for case in cases]
 if any(folder.exists() for folder in folders):
     if not all(folder.is_dir() for folder in folders):
@@ -56,6 +60,12 @@ if any(folder.exists() for folder in folders):
     (out / 'cpue-diagnostics.json').write_text(json.dumps(diagnostics, indent=2) + '\n')
     (out / 'cpue-diagnostics.txt').write_text(''.join((folder / 'cpue-diagnostics.txt').read_text() for folder in selected.values()))
     merged = copy.deepcopy(manifests[0])
+    plan_path = Path(__file__).resolve().parents[1] / 'stages/_plan.json'
+    if plan_path.exists():
+        merged['workflow_plan'] = json.loads(plan_path.read_text())
+        merged['extraction_run_id'] = merged['github_run_id']
+        merged['github_run_id'] = os.getenv('GITHUB_RUN_ID', 'local')
+        merged['github_run_attempt'] = os.getenv('GITHUB_RUN_ATTEMPT', '1')
     for field in ('cpue_runs', 'assessment_runs', 'stage_compute_seconds'):
         merged[field] = {key: value for manifest in manifests for key, value in manifest[field].items()}
     merged['input_preparations'] = {case['choice']: manifest['input_preparation'] for case, manifest in zip(cases, manifests)}

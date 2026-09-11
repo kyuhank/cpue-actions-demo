@@ -16,7 +16,10 @@ input_bytes = (OUT / 'assessment-input.csv').read_bytes()
 if hashlib.sha256(input_bytes).hexdigest() != manifest['input_preparation']['output_sha256']:
     raise SystemExit('Prepared assessment input checksum differs from its record')
 indices = list(csv.DictReader((OUT / 'assessment-input.csv').open()))
-cases = json.loads(Path(__file__).with_name('assessment_cases.json').read_text())
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from settings import assessment_cases
+cases = assessment_cases()
 requested = os.getenv('TOY_ASSESSMENT_CASE', '')
 if requested:
     cases = [case for case in cases if case['key'] == requested]

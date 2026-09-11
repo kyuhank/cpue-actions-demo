@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 ROOT=Path(__file__).resolve().parents[1]
-keys=['extract','cpue_vessel','cpue_year','prepare_vessel','prepare_year','assessment_vessel_ref','assessment_vessel_high_m','assessment_year_ref','assessment_year_high_m','report']
+keys=['extract','cpue_vessel','cpue_year','prepare_vessel','prepare_year','assessment_vessel_ref','assessment_vessel_high_m','assessment_year_ref','assessment_year_high_m','synthesis','report']
 with tempfile.TemporaryDirectory(prefix='cpue-fast-') as tmp:
     root=Path(tmp)
     for name in ['pipeline','scripts','data']:shutil.copytree(ROOT/name,root/name)

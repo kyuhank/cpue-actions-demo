@@ -1,13 +1,13 @@
 # CPUE workflow demo
 
-Synthetic records → extraction → two CPUE choices → input preparation → four toy assessments → report.
+Synthetic records → extraction → two CPUE choices → input preparation → four toy assessments → results synthesis → report.
 
 [Open the workshop demo](https://kyuhank.github.io/cpue-actions-demo/).
 During a hosted session, visitors can start the real GitHub workflow without an account.
 The browser companion also runs the calculations locally.
 
 New data in [cpue-toy-data](https://github.com/kyuhank/cpue-toy-data) trigger
-one GitHub job with ten recorded analysis steps using this repository’s pinned workflow. Each CPUE branch prepares
+one GitHub job with eleven recorded stages using this repository’s pinned workflow. Input preparation combines each CPUE index with extracted catches; the full assessment would also assemble compositions and other inputs. Each CPUE branch prepares
 its input and runs two assessment settings. The report checks and collects all four results.
 Kflow2 is a separate private orchestration app; its source is not included here.
 
@@ -21,4 +21,4 @@ The small runtime image is built in [ofp-sam-docker-images](https://github.com/P
 The seeded generator includes a long-term abundance change, correlated annual availability, varying effort and lognormal–Poisson set catches. Vessel composition changes over time. The deliberately simple CPUE mean models do not estimate uncertainty.
 All data and results are synthetic examples, with no management interpretation.
 
-The fast presentation uses one GitHub runner and one Docker container, with ten recorded steps. `parallel-pipeline.yml` retains the separate-job example. Protected-data production would use approved HPC.
+The presentation uses one GitHub runner and one Docker container. New data run all eleven stages; a CPUE filter change runs six, and one M change runs three. Unchanged outputs are reused only when data, code, container, stage settings and parent fingerprints match, with file checksums verified. Each executed stage includes a four-second presentation pause; computation time is recorded separately. `parallel-pipeline.yml` retains the separate-job example. Protected-data production would use approved HPC.

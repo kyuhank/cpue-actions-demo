@@ -6,14 +6,11 @@ import runpy
 import shutil
 import sys
 import time
-from workflow_plan import fingerprints, hashes
+from workflow_plan import fingerprints, hashes, PARENTS
 
 ROOT = Path(__file__).resolve().parents[1]
 cases = json.loads((ROOT / 'pipeline/assessment_cases.json').read_text())
-parents = {'extract': [], 'cpue_vessel': ['extract'], 'cpue_year': ['extract'],
-           'prepare_vessel': ['cpue_vessel'], 'prepare_year': ['cpue_year'],
-           **{case['key']: ['prepare_vessel' if case['choice'] == 'vessel_adjusted' else 'prepare_year'] for case in cases},
-           'report': [case['key'] for case in cases]}
+parents = PARENTS
 key = sys.argv[1] if len(sys.argv) == 2 else ''
 if key not in parents:
     raise SystemExit('Choose a declared analysis stage')
@@ -30,11 +27,13 @@ if plan:
         if record['fingerprint'] != plan['stages'][parent]['fingerprint'] or record['outputs'] != hashes(folder / 'outputs'):
             raise SystemExit('A parent output does not match the verified workflow plan')
 work.mkdir(parents=True, exist_ok=False)
-if key == 'report':
+if key == 'synthesis':
     for parent in parents[key]:
         shutil.copytree(ROOT / 'stages' / parent / 'outputs', work / 'inputs' / parent)
 elif parents[key]:
-    shutil.copytree(ROOT / 'stages' / parents[key][0] / 'outputs', work / 'outputs')
+    shutil.copytree(ROOT / 'stages' / parents[key][-1] / 'outputs', work / 'outputs')
+if key.startswith('prepare_'):
+    shutil.copytree(ROOT / 'stages/extract/outputs', work / 'inputs/extract')
 os.chdir(work)
 os.environ['GITHUB_JOB'] = key
 os.environ['TOY_CPUE_CHOICE'] = ('vessel_adjusted' if key.endswith('_vessel') else 'year_only') if key.startswith(('cpue_', 'prepare_')) else ''

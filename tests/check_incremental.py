@@ -23,11 +23,14 @@ with tempfile.TemporaryDirectory(prefix='cpue-incremental-') as folder:
             if record['action'] == 'run':
                 subprocess.run([sys.executable, 'scripts/run_stage.py', key], cwd=root, env=env, check=True, stdout=subprocess.DEVNULL)
         return {k for k, v in plan['stages'].items() if v['action'] == 'run'}
-    assert len(execute()) == 10
+    assert len(execute()) == 11
+    baseline_plan=json.loads((root/'stages/_plan.json').read_text())
+    assert baseline_plan['stages']['prepare_vessel']['parents']==['extract','cpue_vessel']
+    assert baseline_plan['stages']['report']['parents']==['synthesis']
     first = root / 'first'; (root / 'stages').rename(first)
     config.write_text(json.dumps({'cpue_vessel': {'min_hooks': 2000}}))
     env['GITHUB_RUN_ID'] = '2'
-    assert execute(first) == {'cpue_vessel', 'prepare_vessel', 'assessment_vessel_ref', 'assessment_vessel_high_m', 'report'}
+    assert execute(first) == {'cpue_vessel', 'prepare_vessel', 'assessment_vessel_ref', 'assessment_vessel_high_m', 'synthesis', 'report'}
     for key in ('extract', 'cpue_year', 'prepare_year', 'assessment_year_ref', 'assessment_year_high_m'):
         for path in (first / key).rglob('*'):
             if path.is_file():
@@ -36,11 +39,11 @@ with tempfile.TemporaryDirectory(prefix='cpue-incremental-') as folder:
     second = root / 'second'; (root / 'stages').rename(second)
     config.write_text(json.dumps({'cpue_vessel': {'min_hooks': 2000}, 'assessment_vessel_high_m': {'M': .35}}))
     env['GITHUB_RUN_ID'] = '3'
-    assert execute(second) == {'assessment_vessel_high_m', 'report'}
-    assert '2 stages executed · 8 reused' in (root / 'stages/report/outputs/report.html').read_text()
+    assert execute(second) == {'assessment_vessel_high_m', 'synthesis', 'report'}
+    assert '3 stages executed · 8 reused' in (root / 'stages/report/outputs/report.html').read_text()
     third = root / 'third'; (root / 'stages').rename(third)
     import sqlite3
     with sqlite3.connect(root / 'data/toy-fishery.sqlite') as db:
         db.execute('UPDATE sets SET catch_n=catch_n+1 WHERE rowid=1')
-    assert len(execute(third)) == 10
-print('Verified: CPUE change runs 5 stages; assessment change runs 2; data change runs all 10. Reused outputs are byte-identical.')
+    assert len(execute(third)) == 11
+print('Verified: CPUE change runs 6 stages; assessment change runs 3; data change runs all 11. Reused outputs are byte-identical.')

@@ -98,7 +98,10 @@ jobs:
       - name: "04 Assessment: year, higher M${{ steps.plan.outputs.assessment_year_high_m == 'reuse' && ' · reused' || '' }}"
         if: steps.plan.outputs.assessment_year_high_m == 'run'
         run: docker exec cpue-workshop python scripts/run_stage.py assessment_year_high_m
-      - name: "05 Report${{ steps.plan.outputs.report == 'reuse' && ' · reused' || '' }}"
+      - name: "05 Results synthesis${{ steps.plan.outputs.synthesis == 'reuse' && ' · reused' || '' }}"
+        if: steps.plan.outputs.synthesis == 'run'
+        run: docker exec cpue-workshop python scripts/run_stage.py synthesis
+      - name: "06 Report${{ steps.plan.outputs.report == 'reuse' && ' · reused' || '' }}"
         if: steps.plan.outputs.report == 'run'
         run: docker exec cpue-workshop python scripts/run_stage.py report
       - name: Save the complete workflow outputs

@@ -6,12 +6,21 @@ import math
 import os
 from pathlib import Path
 import time
+import shutil
 
 started = time.perf_counter()
 out = Path('outputs')
 manifest = json.loads((out / 'manifest.json').read_text())
 if hashlib.sha256((out / 'catch.csv').read_bytes()).hexdigest() != manifest['extraction_outputs']['catch.csv']:
     raise SystemExit('Annual catches differ from the recorded extraction')
+extracted = Path('inputs/extract')
+if extracted.exists():
+    source_manifest = json.loads((extracted / 'manifest.json').read_text())
+    if any(source_manifest[k] != manifest[k] for k in ('source_sha256', 'query_sha256', 'git_commit')):
+        raise SystemExit('Extracted catches and CPUE come from different snapshots or code')
+    if hashlib.sha256((extracted / 'catch.csv').read_bytes()).hexdigest() != source_manifest['extraction_outputs']['catch.csv']:
+        raise SystemExit('Direct extraction input checksum differs from its record')
+    shutil.copyfile(extracted / 'catch.csv', out / 'catch.csv')
 indices = list(csv.DictReader((out / 'cpue.csv').open()))
 removals = list(csv.DictReader((out / 'catch.csv').open()))
 catch = {row['year']: row['catch_t'] for row in removals}
@@ -37,6 +46,7 @@ with (out / 'assessment-input.csv').open('w', newline='') as f:
     writer.writeheader(); writer.writerows(prepared)
 job = os.getenv('GITHUB_JOB', {'vessel_adjusted':'prepare_vessel','year_only':'prepare_year'}.get(requested,'prepare'))
 manifest['input_preparation'] = {'job': job, 'parents': manifest['cpue_runs'],
+    'data_parent': {'job': 'extract', 'snapshot_sha256': manifest['source_sha256'], 'catch_sha256': manifest['extraction_outputs']['catch.csv']},
     'output_sha256': hashlib.sha256((out / 'assessment-input.csv').read_bytes()).hexdigest(),
     'checks': 'CPUE checksum; unique and matching years; positive index; nonnegative removals',
     'mapping': 'annual CPUE joined to removals by year; one toy area; index relative to first year; removals in tonnes',

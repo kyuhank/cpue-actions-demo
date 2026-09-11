@@ -15,9 +15,9 @@ sys.path.insert(0, str(ROOT / 'pipeline'))
 from settings import assessment_cases, stage_settings
 
 PARENTS = {'extract': [], 'cpue_vessel': ['extract'], 'cpue_year': ['extract'],
-           'prepare_vessel': ['cpue_vessel'], 'prepare_year': ['cpue_year'],
+           'prepare_vessel': ['extract', 'cpue_vessel'], 'prepare_year': ['extract', 'cpue_year'],
            **{c['key']: ['prepare_vessel' if c['choice'] == 'vessel_adjusted' else 'prepare_year'] for c in assessment_cases(False)},
-           'report': [c['key'] for c in assessment_cases(False)]}
+           'synthesis': [c['key'] for c in assessment_cases(False)], 'report': ['synthesis']}
 
 
 def digest(data):

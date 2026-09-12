@@ -96,7 +96,7 @@
 .chain.executing .stage:not(.running):not(.failed),.chain.executing .submission-node:not(.running):not(.needs-correction),.chain.executing .quality-gate:not(.running):not(.failed),.chain.executing .ingest-node:not(.running):not(.failed){opacity:.48;border-width:1px;box-shadow:none}
 .chain.executing .stage.blocked small{color:#6a8190}
 .chain.executing .data-node:not(.running){opacity:.48;box-shadow:none}
-.chain.executing .data-node:not(.running) .database-body,.chain.executing .data-node:not(.running) .database-shell ellipse{stroke-width:1;stroke-dasharray:4 3}
+.chain.executing .data-node:not(.running) .database-body,.chain.executing .data-node:not(.running) .database-shell ellipse{stroke-width:1}
 .chain .edges>path.return-history{opacity:.22;stroke-width:1;animation:none}
 .chain .submission-node.running{opacity:1;box-shadow:0 0 0 3px #c58a2020;border-color:#bc8831;background:#fff3d9}
 .chain .submission-node.running strong{color:#946316}
@@ -132,3 +132,32 @@
 .record .input-transfer strong{color:#946012;font-size:13px}
 .record .input-context{display:block;font-size:11px;font-weight:normal;color:#536f80;margin-top:3px}
 .record:has(.input-transfer){padding-top:6px;padding-bottom:6px}
+
+/* Read the current operation before following its highlighted jobs. */
+.record{padding:6px 11px;min-height:43px}.record #message{font-weight:normal}
+.record .operation-title{display:block;color:#173b54;font-size:15px;font-weight:bold;line-height:1.25}
+.record .operation-detail{display:block;color:#536e80;font-size:11px;line-height:1.35;margin-top:3px}
+.record[data-phase=running] .operation-title,.record[data-phase=correction] .operation-title{color:#8b5d16}
+.record .input-transfer strong{font-size:15px}.record .input-transfer .saved-caption{font-size:13px}
+.source-link,.submission-node .source-link,.quality-gate .source-link,.ingest-node .source-link{display:flex;align-items:center;justify-content:center;width:20px;height:20px;top:4px;right:4px;padding:2px;border:1px solid #c8d8e0;border-radius:5px;background:#ffffffc9;color:#638091;cursor:pointer;line-height:1}
+.source-link svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.35;stroke-linecap:round;stroke-linejoin:round}
+.source-link:hover,.source-link:focus-visible{background:white;border-color:#0085ca;color:#0085ca}
+.submission-node .source-link,.quality-gate .source-link,.ingest-node .source-link{width:17px;height:17px;top:2px;right:2px}
+.submission-node .node-control{padding-right:15px}.quality-gate .node-control,.ingest-label.node-control{text-align:center;color:inherit;font:inherit}
+.data-node .source-link{top:18px;right:4px}
+.preview-source{display:flex;align-items:center;gap:7px;margin-top:9px}#preview-repo{flex:1;min-width:0;width:auto;margin-top:0;font-size:12px;padding:8px;overflow-wrap:anywhere}
+#preview-full,#source-full{white-space:nowrap;font-size:11px;color:#0085ca;border:1px solid #c5d9e3;border-radius:5px;padding:6px 7px;background:white}
+
+/* Compact outline symbols stay consistent across the workflow and task views. */
+.status-symbol{display:inline-block;width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;vertical-align:-2px;flex-shrink:0}
+.stage .state-icon{display:inline-flex;vertical-align:-2px;margin-right:4px}.stage.running .state-icon{animation:none}
+.status-symbol.running{animation:status-turn 1.5s linear infinite}
+.submission-node .status-symbol,.ingest-node .status-symbol,.quality-gate .status-symbol,.release .status-symbol{margin-right:4px}
+@keyframes status-turn{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.status-symbol.running{animation:none}}
+@media(max-width:1000px){.stage[data-key=extract]{padding-left:7px;padding-right:7px}.stage[data-key=extract] small{font-size:10.5px}.stage[data-key=extract] .status-symbol{width:11px;height:11px}}
+/* An unframed preview control leaves the title and connector ports clear. */
+.source-link{width:20px;height:18px;top:-12px;right:5px;border:0;border-radius:9px;background:inherit;color:var(--stage-ink,#417a67);opacity:.72}.source-link svg{width:16px;height:16px}.source-link{opacity:0;pointer-events:none;transition:opacity .15s}.stage:hover>.source-link,.stage:focus-within>.source-link,.stage.selected>.source-link,.data-node:hover>.source-link,.data-node:focus-within>.source-link,.data-node.selected>.source-link,.submission-node:hover>.source-link,.submission-node:focus-within>.source-link,.submission-node.selected>.source-link,.quality-gate:hover>.source-link,.quality-gate:focus-within>.source-link,.ingest-node:hover>.source-link,.ingest-node:focus-within>.source-link{opacity:.45;pointer-events:auto}.source-link:hover,.source-link:focus-visible{opacity:1;background:#fff;color:#0085ca}
+.submission-node .source-link,.quality-gate .source-link,.ingest-node .source-link{width:16px;height:16px;top:-10px;right:4px}
+.data-node .source-link{top:0;right:5px}
+.submission-node .node-control{padding-right:0}

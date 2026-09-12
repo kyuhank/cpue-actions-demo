@@ -13,3 +13,29 @@ button:disabled{color:#879ba6;cursor:default;font-weight:normal}#files-view{posi
 .team-sharing{padding:8px 12px;margin:8px 0 10px}.team-sharing>div{display:flex;align-items:center;gap:15px}.team-members{margin-top:0!important}.team-sharing strong{font-size:13px}.team-sharing button{padding:5px 10px}.task-grid{gap:11px}.task-card{padding:12px 14px}.task-card strong{margin-bottom:6px}.task-card .owners{margin:6px 0}.task-shared{margin:4px 0 8px}aside b{font-size:18px}
 
 #intake-details{width:600px;max-width:90vw;border:1px solid #c8dce6;border-radius:10px;padding:22px;color:#001743;background:#fafcfc}#intake-details::backdrop{background:#00174355}.intake-heading{display:flex;justify-content:space-between;align-items:center}.intake-heading h2{margin:0}.intake-heading button{font-size:24px;border:0;background:none;color:#587181}#intake-record{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;background:#edf4f8;padding:14px;border-radius:6px;max-height:220px;overflow:auto}
+
+/* Task status stays visible above the individual execution details. */
+main{min-width:0;padding:12px 20px}.header-actions{display:flex;align-items:center;gap:12px;flex-shrink:0;margin-left:14px;font-size:11px}
+#share-task{border:1px solid #b8cdda;background:white;color:#0085ca;border-radius:5px;padding:6px 10px;cursor:pointer}
+h1{font-size:20px;margin:3px 0 6px}.purpose{font-size:12px;margin:4px 0 9px}#notice{min-height:16px;margin-bottom:8px}.activity-running{color:#916113!important;font-weight:bold}
+.task-grid{gap:10px;margin:8px 0}.task-card{padding:10px 12px;min-width:0;transition:background .2s,border-color .2s;position:relative}
+.task-card strong{font-size:15px;line-height:1.2;margin:0}.task-card .owners{font-size:11px;line-height:1.2;margin:5px 0 7px}
+.task-status{display:flex;align-items:center;justify-content:space-between;gap:6px}.task-card .task-count{font-size:11px;color:#708592;white-space:nowrap}
+.status-badge{display:inline-flex;gap:5px;align-items:center;border-radius:4px;padding:2px 6px;font-size:11px;line-height:1.4;font-weight:bold;background:#f0f4f6;color:#68808d;white-space:nowrap}
+.status-icon{font-size:12px;min-width:13px;text-align:center}.status-badge.running{background:#f8e4b8;color:#895a0c}.status-badge.completed{color:#22795f;background:#e9f5ee}.status-badge.failed,.status-badge.returned{color:#ad452d;background:#fff0e9}.status-badge.blocked{color:#8a6556;background:#f5efeb}
+.status-badge.reused{color:#647e8d;background:#edf2f5}.task-activity{display:block;font-size:11px;line-height:1.35;color:#6a8190;margin-top:6px;min-height:15px;overflow-wrap:anywhere}
+.task-card.is-running,.task-card.is-running:hover{border-color:#bd8526;background:#fff7e7;box-shadow:inset 3px 0 #bd8526,0 0 0 1px #bd85263b}
+.task-card.is-running strong,.task-card.is-running .task-activity{color:#85580f}.task-card.is-running .task-activity{font-weight:bold}.task-card.is-failed,.task-card.is-returned{border-color:#c78470}
+.task-card.is-reused{border-style:dashed;background:#f6f9fa}.task-card.is-not_requested{background:#f6f8f9;border-color:#d7e1e6}.task-card.is-running .status-icon,.job-row.is-running .status-icon,#job-state .running .status-icon{animation:running-signal 1.2s ease-in-out infinite}
+@keyframes running-signal{50%{opacity:.45;transform:scale(.9)}}
+.job-row.is-running{background:#fff6e2}.job-row.is-running td:first-child{box-shadow:inset 3px 0 #bd8526}.job-row.is-running td:first-child button{color:#895a0c}.job-row.is-running td{border-bottom-color:#ead7b2}
+.task-caption{font-size:10px;margin:7px 0}.job-row.is-reused{background:#f6f8fa}.job-row.is-failed{background:#fff3ed}
+@media(max-width:1050px){.header-actions{flex-direction:column;align-items:flex-end;gap:6px}.task-card{padding:9px 10px}.task-card strong{font-size:14px}.task-card .owners{font-size:10px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+
+.status-symbol{display:block;width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.task-card.is-running .status-icon,.job-row.is-running .status-icon,#job-state .running .status-icon{animation:none}
+.status-symbol.running{animation:status-turn 1.5s linear infinite}
+#notice.activity-running{display:flex;align-items:center;gap:7px}
+@keyframes status-turn{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.status-symbol.running{animation:none}}

@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id);
 const positions={cpue_summary:[7,1,5],cpue_report:[7,1,5],data:[1,1,5],extract:[3,1,5],cpue_vessel:[5,1,3],cpue_year:[5,3,5],prepare_vessel:[9,1,3],prepare_year:[9,3,5],assessment_vessel_ref:[11,1,2],assessment_vessel_high_m:[11,2,3],assessment_year_ref:[11,3,4],assessment_year_high_m:[11,4,5],synthesis:[13,1,5],report:[15,1,5]};
 const names={submission:'Data submission',qc:'QC',ingest:'Prepare & load',cpue_summary:'Results summary',cpue_report:'CPUE report',data:'Database',extract:'Extract',cpue_vessel:'CPUE analysis A',cpue_year:'CPUE analysis B',prepare_vessel:'Input prep',prepare_year:'Input prep',assessment_vessel_ref:'Assessment 1',assessment_vessel_high_m:'Assessment 2',assessment_year_ref:'Assessment 1',assessment_year_high_m:'Assessment 2',synthesis:'Results summary',report:'Assessment report'};
-const states={not_requested:'Not requested',waiting:'Waiting',queued:'Queued',idle:'Queued',running:'Running',completed:'Complete',failed:'Failed',blocked:'Blocked',cancelled:'Cancelled'},icons={completed:'✓',running:'◌',failed:'×',blocked:'×',cancelled:'–'};
+const states={not_requested:'Not requested',waiting:'Waiting',queued:'Queued',idle:'Queued',running:'Running',completed:'Complete',failed:'Failed',blocked:'Blocked',cancelled:'Cancelled'},icons={completed:'✓',running:'▶',failed:'×',blocked:'×',cancelled:'–'};
 let qualityRecordOpen=false,qualityAlertStamp=null;
 let previewLog=null,previewLogPending=false,previewLogAt=0;
 let dataDraft=null;
@@ -46,9 +46,18 @@ function nextSource(key){if(['submission','qc','ingest'].includes(key))return da
 function sourceLink(key){
  const link=node(key).querySelector('.source-link'),source=nextSource(key);
  link.hidden=key!=='data'&&!source;
- link.href=key==='data'?'https://kyuhank.github.io/cpue-actions-demo/data.html':source?'https://github.com/'+source.repository+'/tree/'+encodeURIComponent(source.branch):'#';
- link.title=key==='data'?'Open the synthetic database':source?'Open '+source.repository+' · '+source.branch:'';
- link.setAttribute('aria-label',link.title);
+ link.title='Preview '+names[key];link.setAttribute('aria-label',link.title);
+}
+function statusSymbol(state){
+ const shapes={running:'<path d="M17 10a7 7 0 1 1-7-7"/>',completed:'<path d="m4 10 4 4 8-9"/>',failed:'<path d="m10 2 8 15H2zM10 7v4m0 3v.2"/>',blocked:'<circle cx="10" cy="10" r="7"/><path d="M6 10h8"/>',cancelled:'<path d="m5 5 10 10M5 15 15 5"/>',waiting:'<circle cx="10" cy="10" r="7"/><path d="M10 5v5l3 2"/>',reused:'<path d="M4 7a7 7 0 1 1-1 6M4 3v5h5"/>',returned:'<path d="m7 4-4 4 4 4M3 8h9a5 5 0 0 1 0 10"/>',ready:'<circle cx="10" cy="10" r="6"/>',not_requested:'<path d="M5 10h10"/>'};
+ const key=['queued','idle'].includes(state)?'waiting':Object.hasOwn(shapes,state)?state:'ready';
+ return '<svg class="status-symbol '+key+'" data-status-icon="'+key+'" viewBox="0 0 20 20" aria-hidden="true">'+shapes[key]+'</svg>';
+}
+function previewControl(key){
+ const button=document.createElement('button');button.type='button';button.className='source-link';
+ button.innerHTML='<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10c2-3.3 4.7-5 8-5s6 1.7 8 5c-2 3.3-4.7 5-8 5s-6-1.7-8-5Z"/><circle cx="10" cy="10" r="2.2"/></svg>';
+ button.title='Preview '+names[key];button.setAttribute('aria-label',button.title);
+ button.onclick=e=>{e.preventDefault();e.stopPropagation();showPreview(key);};return button;
 }
 function node(key){
  let el=$('chain').querySelector(`[data-key="${key}"]`);if(el)return el;
@@ -58,10 +67,10 @@ function node(key){
  const title=document.createElement('strong');title.textContent=['cpue_vessel','cpue_year'].includes(key)?'CPUE analysis':names[key];control.append(title);
  if(key==='data'){const version=document.createElement('div');version.className='release';const qc=document.createElement('div');qc.className='qc';control.append(version,qc);}
  else{const state=document.createElement('small');state.innerHTML='<span class="state-icon"></span><span class="state-label"></span>';if(['cpue_vessel','cpue_year'].includes(key)){const variant=document.createElement('span');variant.className='analysis-variant';variant.textContent=key==='cpue_vessel'?'A':'B';state.prepend(variant);}control.append(state);if(['cpue_summary','synthesis'].includes(key)){const output=document.createElement('span');output.className='output-note';output.textContent='Plots + tables';control.append(output);}}
- const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.target='_blank';link.rel='noopener';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};
+ const link=previewControl(key);
  if(key==='data'){const shell=document.createElementNS('http://www.w3.org/2000/svg','svg');shell.setAttribute('viewBox','0 0 140 100');shell.setAttribute('preserveAspectRatio','none');shell.setAttribute('aria-hidden','true');shell.classList.add('database-shell');shell.innerHTML='<path class=database-body d="M1 12V87C1 103 139 103 139 87V12"/><ellipse cx=70 cy=12 rx=69 ry=11 /><path class=record-lines d="M38 76H112M38 84H112M38 92H112M65 73V95M88 73V95"/><path class=record-keys d="M27 74h5v4h-5zM27 82h5v4h-5zM27 90h5v4h-5z"/>';el.append(shell);}
  if(key!=='data'){const note=document.createElement('span');note.className='input-note';note.textContent='Saved inputs';control.append(note);}
- el.append(control,link);el.onclick=()=>{selected=key;if(key==='data')dataDraft=String(data?.database_version||2023);draw();showPreview(key);};
+ el.append(control,link);el.onclick=()=>{selected=key;if(key==='data')dataDraft=String(data?.database_version||2023);hidePreview();draw();};
 
  $('chain').append(el);return el;
 }
@@ -69,7 +78,7 @@ function drawCpueProducts(){}
 const escapeHTML=value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
 async function openCpueOutput(kind){
  const stage=data?.stages.find(s=>s.key==='cpue_'+kind);if(!stage?.source_id||stage.status!=='completed')return;
- hidePreview();const ticket=++sourceTicket;$('source-title').textContent=names[stage.key];
+ hidePreview();$('source-full').hidden=true;$('source-full').removeAttribute('href');const ticket=++sourceTicket;$('source-title').textContent=names[stage.key];
  $('source-meta').textContent='Actual GitHub job output · Run #'+data.number;$('source-body').textContent='Loading…';$('source-view').showModal();
  try{const response=await fetch('/api/output?job='+encodeURIComponent(stage.source_id)+'&file='+(kind==='report'?'report.html':'results.html'));if(!response.ok)throw Error('This output is still being published or has expired.');const html=await response.text();if(ticket!==sourceTicket)return;
  const frame=document.createElement('iframe');frame.title=names[stage.key];frame.setAttribute('sandbox','allow-downloads');frame.srcdoc=html;$('source-body').replaceChildren(frame);
@@ -116,7 +125,7 @@ function showPreview(key){
  const stage=[...data.stages,...(data.intake_stages||[])].find(s=>s.key===key);
  const source=(data.has_run&&stage?.code_source)||nextSource(key),registered=validPreviewSource(source),planned=nextSource(key);
  $('preview-repo').hidden=$('preview-version').hidden=!registered&&key!=='data';
- $('preview-next').hidden=true;
+ $('preview-next').hidden=true;$('preview-full').hidden=!registered;$('preview-full').removeAttribute('href');if(registered)$('preview-full').href='https://github.com/'+source.repository+'/tree/'+source.commit;
  if(key==='data'){
   $('preview-repo').textContent='Supabase · synthetic database';$('preview-version').textContent='Saved release v'+(data.database_version||2023);
   $('preview-repo').onclick=()=>openSource('data');
@@ -167,33 +176,33 @@ function qualityStatus(){
 }
 function drawQuality(){
  let gate=$('quality-gate');if(!gate){
-  gate=document.createElement('button');gate.id='quality-gate';gate.type='button';gate.dataset.key='qc';gate.innerHTML='<strong>QC</strong><small></small>';
-  gate.onclick=()=>{showPreview('qc');};
+  gate=document.createElement('div');gate.id='quality-gate';gate.dataset.key='qc';gate.innerHTML='<button class="node-control"><strong>QC</strong><small></small></button>';
+  gate.onclick=()=>{selected='data';dataDraft='new';hidePreview();draw();};
   $('chain').append(gate);
  }
- let submission=$('submission-node');if(!submission){submission=document.createElement('div');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.innerHTML='<button class="node-control"><strong>Data submission</strong></button>';submission.onclick=()=>{selected='data';dataDraft='new';draw();showPreview('submission');};$('chain').append(submission);}
+ let submission=$('submission-node');if(!submission){submission=document.createElement('div');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.innerHTML='<button class="node-control"><strong>Data submission</strong></button>';submission.onclick=()=>{selected='data';dataDraft='new';hidePreview();draw();};$('chain').append(submission);}
  submission.classList.toggle('selected',selected==='data'&&(!dataDraft||dataDraft==='new'));
  node('data').classList.toggle('selected',selected==='data'&&dataDraft!=='new');
- let ingest=$('ingest-node');if(!ingest){ingest=document.createElement('button');ingest.id='ingest-node';ingest.dataset.key='ingest';ingest.textContent='Prepare & load';ingest.title='Owner · Jessica, Tiffany. Align fields, formats and units; load accepted records into the database.';$('chain').append(ingest);}
+ let ingest=$('ingest-node');if(!ingest){ingest=document.createElement('div');ingest.id='ingest-node';ingest.dataset.key='ingest';ingest.textContent='Prepare & load';ingest.title='Owner · Jessica, Tiffany. Align fields, formats and units; load accepted records into the database.';$('chain').append(ingest);}
  for(const [key,el] of [['submission',submission],['qc',gate]]){
 
-  let link=el.querySelector('.source-link');if(!link){link=document.createElement('a');link.className='source-link';link.textContent='↗';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};el.append(link);}sourceLink(key);
+  let link=el.querySelector('.source-link');if(!link){link=previewControl(key);el.append(link);}sourceLink(key);
  }
 
  const actualIngest=data.intake_stages?.find(j=>j.key==='ingest');
  const actualSubmission=data.intake_stages?.find(j=>j.key==='submission');
  const phase=data.intake_stages?.find(j=>j.key==='qc')?.correction_phase;
  submission.dataset.status=phase==='resubmitting'?'running':actualSubmission?.status||'waiting';submission.classList.toggle('running',submission.dataset.status==='running');
- submission.querySelector('strong').textContent=phase==='resubmitting'?'Resubmit':'Data submission';
- ingest.onclick=()=>{selected='data';dataDraft='new';draw();showPreview('ingest');};
- let label=ingest.querySelector('.ingest-label');if(!label){label=document.createElement('span');label.className='ingest-label';ingest.replaceChildren(label);}label.textContent=(actualIngest&&!actualIngest.skipped?(icons[actualIngest.status]||'·')+' ':'')+'Prepare & load';
+ submission.querySelector('strong').innerHTML=(submission.dataset.status==='running'?statusSymbol('running'):'')+(phase==='resubmitting'?'Resubmit':submission.dataset.status==='running'?'Submit data':'Data submission');
+ ingest.onclick=()=>{selected='data';dataDraft='new';hidePreview();draw();};
+ let label=ingest.querySelector('.ingest-label');if(!label){label=document.createElement('button');label.type='button';label.className='ingest-label node-control';ingest.replaceChildren(label);}label.innerHTML=(actualIngest&&!actualIngest.skipped?statusSymbol(actualIngest.status):'')+'Prepare & load';
  const state=qualityStatus();ingest.className='ingest-node '+(actualIngest?.status||(state==='failed'?'blocked':state==='completed'&&data.data_intake?.published?'completed':'waiting'));submission.classList.toggle('needs-correction',state==='failed'&&phase!=='resubmitting');
  const stamp=data?.data_intake?.checked_at;if(state==='failed'&&!phase&&stamp&&stamp!==qualityAlertStamp){qualityAlertStamp=stamp;notice('QC returned the submission: '+(data.data_intake.quality_check.errors?.[0]?.message||'Correct the flagged records.')+' The provider corrects the flagged records and resubmits.');}
- gate.className='quality-gate '+state;gate.querySelector('small').textContent={completed:'✓ Pass',failed:'× Fail',running:'Check…',waiting:'Ready'}[state];
- if(phase==='rechecking')gate.querySelector('small').textContent='Recheck…';
+ gate.className='quality-gate '+state;gate.querySelector('small').innerHTML=statusSymbol(state)+({completed:'Pass',failed:'Fail',running:'',waiting:'Ready'}[state]||'');
+ if(phase==='rechecking')gate.querySelector('small').innerHTML=statusSymbol('running');
  gate.style.transform='translateY(-83px)';
  gate.title='View the data quality check';
- if(!ingest.querySelector('.source-link')){const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource('ingest');};ingest.append(link);}sourceLink('ingest');
+ if(!ingest.querySelector('.source-link')){ingest.append(previewControl('ingest'));}sourceLink('ingest');
  const intakeSelected=selected==='data'&&(!dataDraft||dataDraft==='new');for(const el of [submission,gate,ingest]){el.classList.toggle('impacted',intakeSelected);el.classList.toggle('outside-impact',!!selected&&!intakeSelected);}
  const correction=data.intake_stages?.find(j=>j.key==='qc')?.correction_phase;gate.dataset.correction=correction||'';if(correction==='corrected')gate.title='Initial QC failed → example corrected and resubmitted → recheck passed';
  gate.setAttribute('aria-label','Quality check: '+{completed:'passed',failed:'failed',running:'checking',waiting:'ready'}[state]+'. View checks.');
@@ -294,8 +303,8 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  $('chain').classList.toggle('executing',busy);
  $('run-link').textContent=pendingRun?(pendingRun.run_id?'Run accepted':'Preparing run…'):data.has_run===false?'Ready':'Run #'+data.number;$('run-link').href=pendingRun?.run_url||data.run_url;$('run-state').textContent=pendingRun?'Starting the selected workflow':data.demo?.phase==='cleaning'?'Resetting…':data.has_run===false?'Ready for a fresh demonstration':stale?'Last verified state':expected?'New run pending':data.status==='completed'?(data.conclusion==='success'?'Complete · '+(data.stages.length-reused+(data.intake_stages||[]).filter(j=>!j.skipped).length)+' run · '+reused+' reused':data.conclusion):data.stages.filter(s=>s.status==='running').length>1?data.stages.filter(s=>s.status==='running').length+' analyses running in parallel':data.status.replaceAll('_',' ');$('live-dot').className='dot '+(busy?'live':data.conclusion==='success'?'success':'');
  const source=node('data'),dataImpacted=selected==='data'||impact.has('data'),dataRetained=!!data.has_run&&(data.intake_stages? !data.intake_stages.some(j=>j.key==='ingest'&&!j.skipped&&j.status!=='not_requested'):data.stages.some(j=>j.key==='extract'&&j.reused));
- source.classList.toggle('running',databaseActive());source.classList.toggle('completed',data.database_stage?.status==='completed');source.classList.toggle('impacted',!!selected&&dataImpacted);source.classList.toggle('outside-impact',!!selected&&!dataImpacted);source.classList.toggle('reused',!dataImpacted&&(!!selected||dataRetained));source.classList.toggle('selected',selected==='data');source.querySelector('.node-control').setAttribute('aria-pressed',String(selected==='data'));const qc=data.data_intake?.quality_check,version=(data.intake_stages?.some(j=>j.key==='submission'&&!j.skipped)&&!data.intake_stages?.some(j=>j.key==='ingest'&&j.status==='completed')?data.latest_database_version:data.database_version)||(data.data_intake?.published?qc?.proposed_version:null);source.querySelector('.release').textContent=version?'v'+version:'Versioned data';source.querySelector('.qc').textContent=sending&&changeKind==='data'?'Awaiting submission':qc?(qc.accepted?'✓ QC passed':'× QC failed'):'QC before release';if(Number(version)>=2024&&(!qc||qc.accepted))source.querySelector('.qc').textContent='✓ One added batch';source.querySelector('.qc').classList.toggle('failed',!!qc&&!qc.accepted);if(databaseActive())source.querySelector('.qc').textContent='Verifying release…';
- for(const s of data.stages){const el=node(s.key),state=expected?(impact.has(s.key)||!selected?'waiting':s.status):s.status;el.className='stage '+state+(s.reused&&!expected?' reused':'')+(selected&&impact.has(s.key)?' impacted':'')+(selected&&!impact.has(s.key)?' outside-impact':'')+(selected===s.key?' selected':'');el.querySelector('.state-icon').textContent=s.reused&&!expected?'↺':icons[state]||'·';el.querySelector('.state-label').textContent=s.reused&&!expected?'Reused':states[state]||state;el.querySelector('.node-control').setAttribute('aria-pressed',String(selected===s.key));el.title=(s.parents.length?'Inputs: '+s.parents.map(p=>names[p]).join(' + '):'Input: accepted database release')+' · select to update downstream';}
+ source.classList.toggle('running',databaseActive());source.classList.toggle('completed',data.database_stage?.status==='completed');source.classList.toggle('impacted',!!selected&&dataImpacted);source.classList.toggle('outside-impact',!!selected&&!dataImpacted);source.classList.toggle('reused',dataRetained&&!sending&&!expected);source.classList.toggle('selected',selected==='data');source.querySelector('.node-control').setAttribute('aria-pressed',String(selected==='data'));const qc=data.data_intake?.quality_check,version=(data.intake_stages?.some(j=>j.key==='submission'&&!j.skipped)&&!data.intake_stages?.some(j=>j.key==='ingest'&&j.status==='completed')?data.latest_database_version:data.database_version)||(data.data_intake?.published?qc?.proposed_version:null);source.querySelector('.release').textContent=version?'v'+version:'Versioned data';source.querySelector('.qc').textContent=sending&&changeKind==='data'?'Awaiting submission':qc?(qc.accepted?'✓ QC passed':'× QC failed'):'QC before release';if(Number(version)>=2024&&(!qc||qc.accepted))source.querySelector('.qc').textContent='✓ One added batch';source.querySelector('.qc').classList.toggle('failed',!!qc&&!qc.accepted);if(databaseActive()){source.querySelector('.qc').textContent='Verifying release…';source.querySelector('.release').innerHTML=statusSymbol('running')+source.querySelector('.release').textContent;}
+ for(const s of data.stages){const el=node(s.key),state=expected?(impact.has(s.key)||!selected?'waiting':s.status):s.status;el.className='stage '+state+(s.reused&&!expected?' reused':'')+(selected&&impact.has(s.key)?' impacted':'')+(selected&&!impact.has(s.key)?' outside-impact':'')+(selected===s.key?' selected':'');el.querySelector('.state-icon').innerHTML=statusSymbol(s.reused&&!expected?'reused':state);el.querySelector('.state-label').textContent=s.reused&&!expected?'Reused':states[state]||state;el.querySelector('.node-control').setAttribute('aria-pressed',String(selected===s.key));el.title=(s.parents.length?'Inputs: '+s.parents.map(p=>names[p]).join(' + '):'Input: accepted database release')+' · select to update downstream';}
  const submittingData=key==='data'&&(!dataDraft||dataDraft==='new');
  const count=(selected?data.stages.filter(s=>impact.has(s.key)).length:data.stages.length)+(submittingData?3:0),pendingCount=plannedRoots().length,replayData=key==='data'&&Number(data.database_version)>=2024;
  $('selection-title').textContent=key==='data'?'Data submission':names[key]+(key.startsWith('prepare_')||key.startsWith('assessment_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
@@ -336,39 +345,64 @@ function drawQuota(busy){
   document.querySelector('.record').dataset.phase='limited';
  }
 }
+function operationText(title,detail=''){
+ const heading=document.createElement('strong');heading.className='operation-title';heading.textContent=title;
+ const note=document.createElement('span');note.className='operation-detail';note.textContent=detail;note.hidden=!detail;
+ $('message').replaceChildren(heading,note);
+}
 function narrate(){
  const record=document.querySelector('.record'),qcJob=data.intake_stages?.find(j=>j.key==='qc'),phase=qcJob?.correction_phase;
- const running=data.stages.filter(s=>s.status==='running'),intake=data.intake_stages?.find(j=>j.status==='running'&&!j.skipped);
- const setup=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]).find(s=>s.status==='in_progress'),setupMessage=({'Set up job':'Runner assigned. Initialising the job.','Checkout':'Runner ready. Retrieving the analysis code.','Checkout source data':'Retrieving the selected data and configuration commit.','Prepare code and container':'Preparing the container and checking the selected module versions.','Start analysis container':'Starting the analysis container.','Fetch versioned database snapshot':'Verifying the selected data snapshot.','Restore and verify reusable outputs':'Checking inputs and the execution plan.'})[setup?.name];
- const labels={submission:'Submitting example records for quality checks.',qc:'Checking the submitted records before they enter the database.',ingest:phase==='corrected'?'QC failed → example resubmitted → recheck passed. Loading the accepted records.':'QC passed. Preparing and loading the accepted records.',extract:'Extracting the selected records from the database.',cpue_vessel:'Standardising CPUE using analysis A.',cpue_year:'Standardising CPUE using analysis B.',cpue_summary:'Comparing the CPUE analyses and preparing plots and tables.',cpue_report:'Writing the combined CPUE report.',prepare_vessel:'Combining CPUE A with other assessment inputs.',prepare_year:'Combining CPUE B with other assessment inputs.',synthesis:'Combining assessment results into plots and comparison tables.',report:'Writing the assessment report and saving its analysis record.'};
+ const running=data.stages.filter(s=>s.status==='running'&&!s.reused),intake=data.intake_stages?.find(j=>j.status==='running'&&!j.skipped);
+ const setup=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]).find(s=>s.status==='in_progress');
+ const setupText=({'Set up job':['Prepare the runner.','Set up the machine that will run the jobs.'],Checkout:['Retrieve the analysis code.','Use the code versions selected for this run.'],'Checkout source data':['Retrieve the data settings.','Read the recorded data release and analysis configuration.'],'Prepare code and container':['Prepare the code and software.','Load the selected code versions and the saved container image.'],'Start analysis container':['Start the analysis software.','The container provides the software required by the jobs.'],'Fetch versioned database snapshot':['Read the selected database release.','Verify the snapshot before extracting records.'],'Restore and verify reusable outputs':['Check the inputs and execution plan.','Verify saved outputs before deciding which jobs need to run.']})[setup?.name];
+ const operations={
+  submission:['Submit new data.','Send the example records for quality checks.'],
+  qc:['Check the submission.','Validate fields, effort and catch before loading.'],
+  ingest:['Prepare and load the data.','Arrange accepted records and save a versioned database release.'],
+  extract:['Extract the required records.','Run the saved SQL against the selected database release.'],
+  cpue_vessel:['Estimate the CPUE index · analysis A.','Calculate a relative abundance index from the extracted records.'],
+  cpue_year:['Estimate the CPUE index · analysis B.','Apply the alternative analysis to the same records.'],
+  cpue_summary:['Compare the CPUE results.','Bring analyses A and B together in plots and tables.'],
+  cpue_report:['Build the CPUE report.','Collect the CPUE comparisons and their recorded inputs.'],
+  prepare_vessel:['Build the assessment inputs · CPUE A.','Combine the CPUE index and catch in the model’s required format.'],
+  prepare_year:['Build the assessment inputs · CPUE B.','Combine the CPUE index and catch in the model’s required format.'],
+  synthesis:['Compare the assessment results.','Bring the model outputs together in plots and tables.'],
+  report:['Build the assessment report.','Save the results with their data, code and software versions.']
+ };
  record.dataset.phase=data.status==='completed'?'complete':'running';
  if(data.source?.stale||(!sending&&!expected&&data.session&&!data.session.can_update&&data.status==='completed'))return;
- let message;
- if(sending)message=changeKind==='data'?'Submitting the example and requesting quality checks.':'Saving the selected versions and preparing the dependent jobs.';
- else if(pendingRun){const elapsed=Math.floor((Date.now()-pendingRun.started)/1000);message=pendingRun.run_id?'Request accepted. Waiting for the runner to start · '+elapsed+' s':'Saving the selection and confirming the execution request · '+elapsed+' s';}
- else if(data.has_run&&data.status==='queued')message='Run #'+data.number+' accepted. Waiting for an available runner · '+Math.max(0,Math.floor((Date.now()-Date.parse(data.created_at))/1000))+' s';
- else if(phase==='returned'){message='QC failed: one record has zero hooks. Returning the submission for correction.';record.dataset.phase='correction';}
- else if(phase==='resubmitting'){message='Resubmit: the provider’s corrected file is sent back for QC.';record.dataset.phase='correction';}
- else if(phase==='rechecking'){message='Corrected records resubmitted → checking them again.';record.dataset.phase='correction';}
- else if(intake)message=intake.key==='qc'&&phase==='corrected'?'QC passed on the second check. Saving the accepted submission.':labels[intake.key];
- else if(databaseActive())message='Database: retrieving and verifying the accepted data release.';
- else if(running.length>1){const cpue=running.filter(s=>['cpue_vessel','cpue_year'].includes(s.key)).length,assess=running.filter(s=>s.key.startsWith('assessment_')).length;message=cpue>1?'Running the two CPUE analyses in parallel.':assess>1?'Running '+assess+' assessment models in parallel.':running.length+' independent jobs are running; dependent jobs wait for their inputs.';}
- else if(running.length){const key=running[0].key;message=labels[key]||(key.startsWith('assessment_')?'Fitting '+names[key].toLowerCase()+' using CPUE '+(key.includes('vessel')?'A':'B')+'.':'Running the selected analysis.');}
- else if(setupMessage)message=setupMessage;
- else if(data.has_run===false)message='Select a starting stage. Run it and its dependent jobs.';
- else if(data.status!=='completed'&&data.stages.every(s=>s.status==='completed'))message='Analyses complete. Saving outputs and finishing the run.';
- else if(data.status!=='completed')message=data.stages.some(s=>s.status==='completed'&&!s.reused)?'Results saved. Passing verified outputs to the next jobs.':phase==='corrected'?(data.intake_stages?.some(s=>s.key==='ingest'&&s.status==='completed')?'QC passed. Preparing the analyses with the accepted data.':'QC passed. Preparing to load the accepted records.'):'Preparing code, software and the selected data version.';
- else if(data.conclusion==='success'){const ran=data.stages.filter(s=>!s.reused).length+(data.intake_stages||[]).filter(s=>!s.skipped).length;message=phase==='corrected'?'QC failed → corrected → passed. '+ran+' jobs completed. Open a job to inspect its outputs.':ran+' jobs completed. Open a job to inspect its outputs.';}
- else{const failed=[...(data.intake_stages||[]),...data.stages].find(s=>s.status==='failed');message=(failed?({submission:'Data submission',qc:'QC',ingest:'Prepare & load'}[failed.key]||names[failed.key])+' stopped. ':'The workflow stopped. ')+'Open its job record to inspect the reason.';record.dataset.phase='failed';}
- if(message)$('message').textContent=message;
+ let text;
+ if(sending)text=['Requesting the run.','Save your selection and start the dependent jobs.'];
+ else if(pendingRun){const seconds=Math.floor((Date.now()-pendingRun.started)/1000);text=pendingRun.run_id?['Waiting for a runner.','Request accepted · '+seconds+' s elapsed.']:['Confirming the request.','Saving the selected versions · '+seconds+' s elapsed.'];}
+ else if(data.has_run&&data.status==='queued')text=['Waiting for a runner.','Run #'+data.number+' is accepted. Execution starts when a runner is available.'];
+ else if(phase==='returned'){text=['QC failed · return for correction.','One record has zero hooks. The provider needs to correct it.'];record.dataset.phase='correction';}
+ else if(phase==='resubmitting'){text=['Resubmit the corrected data.','The provider’s corrected file is sent back for QC.'];record.dataset.phase='correction';}
+ else if(phase==='rechecking'){text=['Check the corrected submission.','Only accepted records continue to the database.'];record.dataset.phase='correction';}
+ else if(intake)text=intake.key==='qc'&&phase==='corrected'?['QC passed on the second check.','Save the accepted records and continue to loading.']:operations[intake.key];
+ else if(databaseActive())text=['Read the selected database release.','Verify the saved snapshot before extracting records.'];
+ else if(running.length>1){
+  const cpue=running.filter(s=>['cpue_vessel','cpue_year'].includes(s.key)).length,assess=running.filter(s=>s.key.startsWith('assessment_')).length,prepare=running.some(s=>s.key.startsWith('prepare_'));
+  text=cpue>1?['Run both CPUE analyses.','The same records produce two alternative abundance indices.']:assess>1?['Run the assessment models.','Fit '+assess+' model configurations in parallel using the prepared inputs.']:prepare?['Prepare inputs and compare CPUE.','Create model inputs alongside the CPUE comparison plots and tables.']:['Run independent jobs together.','Each downstream job waits until its required inputs are ready.'];
+ }
+ else if(running.length){const key=running[0].key;text=operations[key]||['Run '+inputLabel(key)+'.','Fit the model to the prepared assessment inputs.'];}
+ else if(setupText)text=setupText;
+ else if(data.has_run===false)text=['Choose where to start.','Select a stage and run it with its dependent jobs.'];
+ else if(data.status!=='completed'&&data.stages.every(s=>s.status==='completed'))text=['Save the completed results.','Publish the job outputs so they can be inspected and reused.'];
+ else if(data.status!=='completed')text=['Prepare the next group of jobs.','Pass the completed outputs to the jobs that need them.'];
+ else if(data.conclusion==='success'){
+  const ran=data.stages.filter(s=>!s.reused).length+(data.intake_stages||[]).filter(s=>!s.skipped).length,reused=data.stages.filter(s=>s.reused).length;
+  text=['Results are ready.',ran+' jobs completed'+(reused?' · '+reused+' reused unchanged':'')+'. Open a job to inspect its outputs.'];
+ }else{
+  const failed=[...(data.intake_stages||[]),...data.stages].find(s=>s.status==='failed');text=[(failed?names[failed.key]:'The workflow')+' stopped.','Open the failed job to see what needs to be corrected.'];record.dataset.phase='failed';
+ }
+ if(text)operationText(...text);
  const transfers=savedInputTransfers();
  if(transfers.length&&!intake&&!data.source?.stale){
   const saved=[...new Set(transfers.flatMap(t=>t.saved.map(s=>inputLabel(s.key))))],targets=[...new Set(transfers.map(t=>inputLabel(t.stage.key)))];
   const line=document.createElement('span');line.className='input-transfer';
   const caption=document.createElement('span');caption.className='saved-caption';caption.textContent=transfers.some(t=>t.mixed)?'Saved + new outputs':'Saved outputs';
   const arrow=document.createElement('span');arrow.className='transfer-arrow';arrow.textContent='→';
-  const target=document.createElement('strong');target.textContent=targets.join(' + ');
-  line.append(caption,arrow,target);
+  const target=document.createElement('strong');target.textContent=targets.join(' + ');line.append(caption,arrow,target);
   const context=document.createElement('span');context.className='input-context';context.textContent=saved.join(' + ')+' · reused unchanged.';
   $('message').replaceChildren(line,context);
  }
@@ -465,12 +499,12 @@ const sourceCache=new Map();let sourceTicket=0;
 $('source-close').onclick=()=>$('source-view').close();
 $('source-view').addEventListener('close',()=>{++sourceTicket;$('source-body').replaceChildren();});
 async function openSource(key,recordedSource=null){
- hidePreview();const ticket=++sourceTicket,body=$('source-body');$('source-title').textContent=key==='data'?'Database':'Code repository · '+stageTitle(key);$('source-meta').textContent='';body.replaceChildren();$('source-view').showModal();
+ hidePreview();$('source-full').hidden=true;$('source-full').removeAttribute('href');const ticket=++sourceTicket,body=$('source-body');$('source-title').textContent=key==='data'?'Database':'Code repository · '+stageTitle(key);$('source-meta').textContent='';body.replaceChildren();$('source-view').showModal();
  if(key==='data'){
   $('source-meta').textContent='Supabase · saved snapshot · read-only records';const frame=document.createElement('iframe');frame.title='Database snapshot preview';frame.setAttribute('sandbox','allow-scripts allow-same-origin');frame.referrerPolicy='no-referrer';frame.src='https://kyuhank.github.io/cpue-actions-demo/data.html?version='+(dataDraft&&dataDraft!=='new'?dataDraft:data?.database_version||2023);body.append(frame);return;
  }
  const source=recordedSource||nextSource(key);if(!source||!/^kyuhank\/cpue-(actions-demo|demo-(extract|cpue|inputs|assessment|synthesis|report))$/.test(source.repository)||!/^[a-f0-9]{40}$/.test(source.commit)){body.textContent='Loading the registered source. Try again in a moment.';return;}
- $('source-title').textContent=source.repository;
+ $('source-title').textContent=source.repository;$('source-full').hidden=false;$('source-full').href='https://github.com/'+source.repository+'/tree/'+source.commit;
  $('source-meta').textContent=source.branch+' · '+source.commit.slice(0,12)+' · Read-only files from GitHub';
  const picker=document.createElement('select'),code=document.createElement('pre');picker.id='source-file';picker.setAttribute('aria-label','Repository file');body.append(picker,code);
  const base='https://raw.githubusercontent.com/'+source.repository+'/'+source.commit+'/';

@@ -33,7 +33,7 @@ def rpc(url, key, name, body):
 
 
 def materialise(snapshot, target):
-    if not isinstance(snapshot.get('version'), int) or not 2023 <= snapshot['version'] <= 2035:
+    if not isinstance(snapshot.get('version'), int) or snapshot['version'] not in (2021, 2022, 2023, 2024):
         raise ValueError('Unknown database version')
     if not 1 <= len(snapshot['sets']) <= 15000 or not 1 <= len(snapshot['removals']) <= 40:
         raise ValueError('Invalid synthetic snapshot size')

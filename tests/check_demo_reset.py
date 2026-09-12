@@ -27,10 +27,16 @@ try:
             break
         time.sleep(.25)
     good('create role anon;create role authenticated;create role service_role;create table public.untouched(value integer);insert into public.untouched values(7);')
-    for file in ['schema.sql','seed.sql','quality-check.sql','cloud-control.sql','demo-lifecycle.sql']:
+    for file in ['schema.sql','seed.sql','quality-check.sql','cloud-control.sql','demo-lifecycle.sql','saved-snapshots.sql']:
         good((root/'supabase'/file).read_text())
     good((root/'supabase/demo-lifecycle.sql').read_text())
     baseline = good('select public.cpue_snapshot(2023);')
+    archives={v:good(f'set role anon;select public.cpue_snapshot({v})') for v in (2021,2022)}
+    for v,raw in archives.items():
+        item=json.loads(raw);assert item['version']==v and item['quality_check']['accepted']
+        assert max(row[1] for row in item['sets'])==v
+        assert len(item['sets'])<len(json.loads(baseline)['sets'])
+    assert sql('set role anon;select * from workshop_private.saved_snapshots').returncode!=0
     for query in ["select public.workshop_demo_state()","select public.workshop_demo_claim_reset(101)",
                   "select public.workshop_demo_finish_reset(101)"]:
         assert sql('set role anon;' + query).returncode != 0
@@ -52,6 +58,7 @@ try:
     assert good('select count(*) from workshop_private.cloud_dispatches') == '0'
     assert good("select key from workshop_private.cloud_cache") == 'unrelated'
     assert good('select public.cpue_snapshot(2023)') == baseline
+    for v,raw in archives.items():assert good(f'select public.cpue_snapshot({v})')==raw
     assert good('select max(version) from public.cpue_releases') == '2023'
     assert json.loads(good('select public.workshop_state()'))['remaining'] == 59
     assert json.loads(good('select public.workshop_demo_state()'))['phase'] == 'idle'

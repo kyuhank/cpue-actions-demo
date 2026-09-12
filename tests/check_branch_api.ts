@@ -63,8 +63,8 @@ Deno.test('Every stage can choose independently; a combined request keeps other 
  }
 });
 
-Deno.test('Only the two bounded database releases can accompany a module selection',()=>{
- for(const version of [2023,2024])assert(parseSelection(JSON.stringify({start:'cpue_vessel',branches:{},data_version:version})).data_version===version);
+Deno.test('Only the bounded database releases can accompany a module selection',()=>{
+ for(const version of [2021,2022,2023,2024])assert(parseSelection(JSON.stringify({start:'cpue_vessel',branches:{},data_version:version})).data_version===version);
  for(const version of [2025,'2023',null,{sql:'select *'},-1]){
   let rejected=false;try{parseSelection(JSON.stringify({start:'data',branches:{},data_version:version}));}catch{rejected=true;}assert(rejected);
  }

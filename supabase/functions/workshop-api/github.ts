@@ -85,7 +85,7 @@ async function moduleConfiguration(triggerCommit:string){
  const [locked,catalog,config,dataConfig]=await Promise.all([read('modules.lock.json'),read('module-branches.json',true),github(`contents/config/modules.json?ref=${triggerCommit}`,'GET',undefined,true),github(`contents/config/data.json?ref=${triggerCommit}`,'GET',undefined,true)]);
  const selections=config.ok?JSON.parse(atob((await config.json()).content.replace(/\s/g,''))):{};
  const rawData=dataConfig.ok?JSON.parse(atob((await dataConfig.json()).content.replace(/\s/g,''))):{};
- const result={...selectedModules(locked,catalog,selections),dataVersion:[2023,2024].includes(rawData.version)?rawData.version:undefined};
+ const result={...selectedModules(locked,catalog,selections),dataVersion:[2021,2022,2023,2024].includes(rawData.version)?rawData.version:undefined};
  if(moduleCache.size>=16)moduleCache.clear();moduleCache.set(triggerCommit,result);return result;
 }
 async function runModules(run:any){try{return await moduleConfiguration(run.head_sha);}catch{return {sources:{} as Record<string,ModuleSource>,dataVersion:undefined};}}
@@ -191,7 +191,7 @@ export async function change(stage:string){
 export function parseSelection(text:string){
  if(text.length>2048)throw Error('Workshop selection is too large.');
  const value=JSON.parse(text);
- if(!value||Array.isArray(value)||Object.keys(value).some(k=>!['branches','start','data_version'].includes(k))||(value.data_version!==undefined&&![2023,2024].includes(value.data_version))
+ if(!value||Array.isArray(value)||Object.keys(value).some(k=>!['branches','start','data_version'].includes(k))||(value.data_version!==undefined&&![2021,2022,2023,2024].includes(value.data_version))
     ||(value.start!=='data'&&!changeable.has(value.start))||!value.branches||typeof value.branches!=='object'||Array.isArray(value.branches)
     ||Object.keys(value.branches).length>definitions.length)throw Error('Choose a stage and registered branches.');
  for(const [key,branch] of Object.entries(value.branches))if(!changeable.has(key as any)||typeof branch!=='string'||!/^[a-z0-9-]{1,60}$/.test(branch))throw Error('Unknown module branch.');

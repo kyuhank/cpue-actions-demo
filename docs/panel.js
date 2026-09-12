@@ -1,8 +1,9 @@
 
 const $=id=>document.getElementById(id);
-const positions={data:[1,1,5],extract:[2,1,5],cpue_vessel:[3,1,3],cpue_year:[3,3,5],prepare_vessel:[4,1,3],prepare_year:[4,3,5],assessment_vessel_ref:[5,1,2],assessment_vessel_high_m:[5,2,3],assessment_year_ref:[5,3,4],assessment_year_high_m:[5,4,5],synthesis:[6,1,5],report:[7,1,5]};
-const names={data:'Data',extract:'Extract',cpue_vessel:'CPUE A',cpue_year:'CPUE B',prepare_vessel:'Input prep',prepare_year:'Input prep',assessment_vessel_ref:'Assessment 1',assessment_vessel_high_m:'Assessment 2',assessment_year_ref:'Assessment 1',assessment_year_high_m:'Assessment 2',synthesis:'Synthesis',report:'Report'};
+const positions={data:[1,1,5],extract:[3,1,5],cpue_vessel:[5,1,3],cpue_year:[5,3,5],prepare_vessel:[7,1,3],prepare_year:[7,3,5],assessment_vessel_ref:[9,1,2],assessment_vessel_high_m:[9,2,3],assessment_year_ref:[9,3,4],assessment_year_high_m:[9,4,5],synthesis:[11,1,5],report:[13,1,5]};
+const names={data:'Database',extract:'Extract',cpue_vessel:'CPUE A',cpue_year:'CPUE B',prepare_vessel:'Input prep',prepare_year:'Input prep',assessment_vessel_ref:'Assessment 1',assessment_vessel_high_m:'Assessment 2',assessment_year_ref:'Assessment 1',assessment_year_high_m:'Assessment 2',synthesis:'Synthesis',report:'Report'};
 const states={waiting:'Waiting',queued:'Queued',idle:'Queued',running:'Running',completed:'Complete',failed:'Failed',blocked:'Blocked',cancelled:'Cancelled'},icons={completed:'✓',running:'◌',failed:'×',blocked:'×',cancelled:'–'};
+let qualityRecordOpen=false;
 let previewLog=null,previewLogPending=false,previewLogAt=0;
 let dataDraft=null;
 let branchCatalog=null,branchLoading=false,runRoots=null;const branchDrafts={};
@@ -13,7 +14,7 @@ function pendingBranches(){return Object.fromEntries(Object.entries(branchDrafts
 function affected(){
  if(!data||(!selected&&!runRoots&&!Object.keys(pendingBranches()).length))return new Set();
  const roots=runRoots&&(sending||expected||data.status!=='completed')?runRoots:[...Object.keys(pendingBranches()),...(selected?[selected]:[])];
- if(dataDraft!==null&&dataDraft!=='new'&&Number(dataDraft)!==Number(data.database_version))return new Set(data.stages.map(s=>s.key));
+ if(dataDraft!==null&&dataDraft!=='new'&&Number(dataDraft)!==Number(data.database_version))return new Set(['data',...data.stages.map(s=>s.key)]);
  if(roots.includes('data')||(data.has_run===false&&!data.baseline_available))return new Set(data.stages.map(s=>s.key));
  const result=new Set(roots);
  let changed=true;while(changed){changed=false;for(const s of data.stages)if(!result.has(s.key)&&(s.parents||[]).some(p=>result.has(p))){result.add(s.key);changed=true;}}
@@ -35,8 +36,8 @@ function node(key){
  const title=document.createElement('strong');title.textContent=names[key];control.append(title);
  if(key==='data'){const version=document.createElement('div');version.className='release';const qc=document.createElement('div');qc.className='qc';control.append(version,qc);}
  else{const state=document.createElement('small');state.innerHTML='<span class="state-icon"></span><span class="state-label"></span>';control.append(state);}
- const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.target='_blank';link.rel='noopener';link.onclick=e=>{e.stopPropagation();hidePreview();};link.onmouseenter=hidePreview;
- el.append(control,link);el.onclick=()=>{selected=key;draw();showPreview(key);};
+ const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.target='_blank';link.rel='noopener';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};link.onmouseenter=hidePreview;
+ el.append(control,link);el.onclick=()=>{selected=key;if(key==='data')dataDraft=String(data?.database_version||2023);draw();showPreview(key);};
  el.onmouseenter=()=>{clearTimeout(previewTimer);previewTimer=setTimeout(()=>showPreview(key),180);};el.onmouseleave=hidePreview;control.onfocus=()=>showPreview(key);control.onblur=hidePreview;
  $('chain').append(el);return el;
 }
@@ -74,13 +75,14 @@ function placePopup(box,element){
 }
 
 function showPreview(key){
- if(!data||sending||$('sql-view').open)return;previewKey=key;
+ if(!data||sending||$('sql-view').open||$('branch-view').open||$('source-view').open)return;previewKey=key;
  const stage=data.stages.find(s=>s.key===key);
- $('preview-title').textContent=names[key]+(key.startsWith('assessment_')||key.startsWith('prepare_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
+ $('preview-title').textContent=(key==='qc'?'Quality check':names[key])+(key.startsWith('assessment_')||key.startsWith('prepare_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
  let lines=[];
- if(key==='data'){
+ if(key==='data'||key==='qc'){
   const q=data.data_intake?.quality_check;$('preview-state').textContent=q&&!q.accepted?'QC failed':'Database · v'+(data.database_version||2023);
-  lines=q&&!q.accepted?qualityRecord().filter(x=>x.startsWith('FAIL')||x.startsWith('RETURN')).slice(0,3):['Select a saved release, or add one checked batch.'];
+  lines=q&&!q.accepted?qualityRecord().filter(x=>x.startsWith('FAIL')||x.startsWith('RETURN')).slice(0,3):key==='qc'?(q?['PASS  '+(q.checks||[]).slice(0,3).join(' · '),'Accepted release → extraction may start.']:['Check fields, duplicates, effort and catch.','Reject invalid data before publication.']):['Select a saved release, or add one checked batch.'];
+  if(key==='qc')$('preview-state').textContent=qualityStatus()==='failed'?'Rejected · no new workflow':qualityStatus()==='completed'?'Passed · before extraction':'Before extraction';
  }else{
   $('preview-state').textContent=(stage.reused?'Reused':states[stage.status]||stage.status)+(data.has_run?' · GitHub #'+data.number:'');
   const record=previewLog?.run_id===data.run_id&&previewLog?.stage===key?previewLog:null;
@@ -88,7 +90,7 @@ function showPreview(key){
   else lines=stage.reused?['Verified outputs retained.']:stage.status==='waiting'?['Waiting for '+(stage.parents.map(p=>names[p]).join(' + ')||'the selected data release')+'.']:['Reading the GitHub execution record…'];
   loadPreviewLog(key);
  }
- $('preview-record').textContent=lines.join('\n');$('preview').hidden=false;placePopup($('preview'),node(key));
+ $('preview-record').textContent=lines.join('\n');$('preview').hidden=false;placePopup($('preview'),key==='qc'?$('quality-gate'):node(key));
 }
 async function loadPreviewLog(key){
  if(!data.has_run||previewLogPending||(previewLog?.stage===key&&previewLog?.run_id===data.run_id&&Date.now()-previewLogAt<2500))return;
@@ -97,63 +99,108 @@ async function loadPreviewLog(key){
  if(updated&&previewKey===key&&data.run_id===run&&previewLog?.stage===key)showPreview(key);
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){hidePreview();$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}});
+function roundedRoute(points,radius=6){
+ const clean=points.filter((p,i)=>!i||p[0]!==points[i-1][0]||p[1]!==points[i-1][1]);
+ let d=`M${clean[0].join(',')}`;
+ for(let i=1;i<clean.length-1;i++){
+  const a=clean[i-1],b=clean[i],c=clean[i+1],u=Math.hypot(b[0]-a[0],b[1]-a[1]),v=Math.hypot(c[0]-b[0],c[1]-b[1]),r=Math.min(radius,u/2,v/2);
+  d+=`L${b[0]+(a[0]-b[0])*r/u},${b[1]+(a[1]-b[1])*r/u}Q${b.join(',')} ${b[0]+(c[0]-b[0])*r/v},${b[1]+(c[1]-b[1])*r/v}`;
+ }
+ return d+`L${clean.at(-1).join(',')}`;
+}
+function qualityStatus(){
+ const q=data?.data_intake?.quality_check;
+ return sending&&changeKind==='data'?'running':q?(q.accepted?'completed':'failed'):'waiting';
+}
+function drawQuality(){
+ let gate=$('quality-gate');if(!gate){
+  gate=document.createElement('button');gate.id='quality-gate';gate.type='button';gate.dataset.key='qc';gate.innerHTML='<strong>QC</strong><small></small>';
+  gate.onclick=()=>{qualityRecordOpen=true;hidePreview();$('console').hidden=false;$('logs').textContent='Hide record';$('logs').setAttribute('aria-expanded','true');showQualityRecord();};
+  gate.onmouseenter=()=>showPreview('qc');gate.onmouseleave=hidePreview;gate.onfocus=()=>showPreview('qc');gate.onblur=hidePreview;$('chain').append(gate);
+ }
+ let submission=$('submission-node');if(!submission){submission=document.createElement('button');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.textContent='Data submission';submission.onclick=()=>{selected='data';dataDraft='new';draw();};$('chain').append(submission);}
+ submission.classList.toggle('selected',selected==='data'&&(!dataDraft||dataDraft==='new'));
+ node('data').classList.toggle('selected',selected==='data'&&dataDraft!=='new');
+ const state=qualityStatus();gate.className='quality-gate '+state;gate.querySelector('small').textContent={completed:'✓ Pass',failed:'× Fail',running:'Check…',waiting:'Ready'}[state];
+ gate.style.transform='translateY(-66px)';
+ gate.setAttribute('aria-label','Quality check: '+{completed:'passed',failed:'failed',running:'checking',waiting:'ready'}[state]+'. View checks.');
+}
+function showQualityRecord(){
+ $('console-title').textContent='Data quality check · before extraction';
+ $('console-lines').textContent=qualityRecord().join('\n')||'Incoming data are checked before a release is published. Select Data to add a checked batch or test a rejected batch.';
+ $('console-link').removeAttribute('href');$('console-link').textContent='';
+}
 function links(){
  const root=$('chain');root.querySelector('.edges')?.remove();if(!data)return;
- const impact=affected(),stages=new Map(data.stages.map(s=>[s.key,s])),rect=root.getBoundingClientRect(),ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
- svg.classList.add('edges');
+ const impact=affected(),rect=root.getBoundingClientRect(),ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
+ const failedQC=qualityStatus()==='failed'&&selected==='data';
+ if(selected==='data'){impact.add('data');if(!dataDraft||dataDraft==='new'){impact.add('submission');impact.add('qc');}}
+ const stages=new Map(data.stages.map(s=>[s.key,s]));stages.set('qc',{status:qualityStatus()});
+ svg.classList.add('edges');svg.setAttribute('viewBox',`0 0 ${rect.width} ${rect.height}`);
  const defs=document.createElementNS(ns,'defs');
- for(const [id,color] of Object.entries({base:'#657f91',muted:'#9bb0bc',selected:'#0085ca',active:'#b77b1c'})){
-  const marker=document.createElementNS(ns,'marker');for(const [name,value] of Object.entries({id:'arrow-'+id,viewBox:'0 0 8 8',refX:'7',refY:'4',markerWidth:'7',markerHeight:'7',markerUnits:'userSpaceOnUse',orient:'auto'}))marker.setAttribute(name,value);
-  const head=document.createElementNS(ns,'path');head.setAttribute('d','M1 1L7 4L1 7');head.setAttribute('style','fill:none;stroke:'+color+';stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round');marker.append(head);defs.append(marker);
- }svg.append(defs);svg.setAttribute('viewBox',`0 0 ${rect.width} ${rect.height}`);
- for(const child of data.stages)for(const parent of child.key==='extract'?['data']:child.parents||[]){
+ for(const [id,color] of Object.entries({base:'#657f91',muted:'#9bb0bc',selected:'#0085ca',active:'#b77b1c',failed:'#be593d'})){
+  const marker=document.createElementNS(ns,'marker');for(const [name,value] of Object.entries({id:'arrow-'+id,viewBox:'0 0 7 7',refX:'6',refY:'3.5',markerWidth:'7',markerHeight:'7',markerUnits:'userSpaceOnUse',orient:'auto'}))marker.setAttribute(name,value);
+  const head=document.createElementNS(ns,'path');head.setAttribute('d','M0 0L6 3.5L0 7Z');head.setAttribute('style','fill:'+color+';stroke:none');marker.append(head);defs.append(marker);
+ }svg.append(defs);
+ const all=[{key:'qc',parents:['submission'],status:qualityStatus()},{key:'data',parents:['qc']},...data.stages.map(s=>s.key==='extract'?{...s,parents:['data']}:s)];
+ for(const child of all)for(const parent of child.parents||[]){
   const a=root.querySelector(`[data-key="${parent}"]`)?.getBoundingClientRect(),b=root.querySelector(`[data-key="${child.key}"]`)?.getBoundingClientRect();if(!a||!b)continue;
-  // Highlight the selected execution path, not every input feeding an affected stage.
-  const inPath=impact.has(child.key)&&(impact.has(parent)||(parent==='data'&&selected==='data'));
-  const reusedInput=child.reused||stages.get(parent)?.reused;
-  const muted=selected?!inPath:!!reusedInput;
-  const port=child.key==='synthesis'?(child.parents.indexOf(parent)+1)/(child.parents.length+1):.5;
-  const x=a.right-rect.left+1,y=a.top+a.height/2-rect.top,X=b.left-rect.left-5,Y=b.top+b.height*port-rect.top,m=(x+X)/2,path=document.createElementNS(ns,'path');
-  path.dataset.from=parent;path.dataset.to=child.key;
-  if(parent==='extract'&&child.key.startsWith('prepare_')){
-   const top=child.key==='prepare_vessel',rail=top?3:rect.height-3,target=b.left-rect.left+b.width*.6,end=top?b.top-rect.top-5:b.bottom-rect.top+5;
-   path.classList.add('data-edge');path.setAttribute('d',`M${x},${y}C${x+12},${y} ${x+12},${rail} ${x+28},${rail}H${target-10}Q${target},${rail} ${target},${end}`);
-   const label=document.createElementNS(ns,'text');label.classList.add('edge-label');label.classList.toggle('muted',muted);label.setAttribute('x',x+32);label.setAttribute('y',rail+(top?-5:12));label.textContent='Catch · length/age comps · …';svg.append(label);
-  }else path.setAttribute('d',`M${x},${y}C${m},${y} ${m},${Y} ${X},${Y}`);
-  path.classList.toggle('preview',!!selected&&inPath);
-  path.classList.toggle('muted',muted);
-  const running=!expected&&!sending&&!muted&&!reusedInput&&child.status==='running';
-  path.classList.toggle('active',running);path.setAttribute('marker-end','url(#arrow-'+(muted?'muted':running?'active':selected&&inPath?'selected':'base')+')');
+  const inPath=impact.has(child.key)&&impact.has(parent),reusedInput=child.reused||stages.get(parent)?.reused;
+  const muted=(selected?!inPath:!!reusedInput)||(failedQC&&child.key!=='qc');
+  let x=a.right-rect.left+1,y=a.top+a.height/2-rect.top,X=b.left-rect.left-4,Y=b.top+b.height/2-rect.top,points;
+  const path=document.createElementNS(ns,'path');path.dataset.from=parent;path.dataset.to=child.key;
+  if(parent==='submission'||parent==='qc'){
+   x=a.left+a.width/2-rect.left;y=a.bottom-rect.top+1;X=b.left+b.width/2-rect.left;Y=b.top-rect.top-4;points=[[x,y],[X,Y]];
+  }else if(parent==='extract'&&child.key.startsWith('prepare_')){
+   const top=child.key==='prepare_vessel',rail=top?-4:rect.height+4;
+   x=a.left+a.width*.5-rect.left;y=(top?a.top-1:a.bottom+1)-rect.top;
+   X=b.left+b.width*.55-rect.left;Y=(top?b.top-4:b.bottom+4)-rect.top;
+   points=[[x,y],[x,rail],[X,rail],[X,Y]];path.classList.add('data-edge');
+   const label=document.createElementNS(ns,'text');label.classList.add('edge-label');label.classList.toggle('muted',muted);label.setAttribute('x',x+10);label.setAttribute('y',rail+(top?-6:13));label.textContent='Catch · length/age comps';svg.append(label);
+  }else{
+   if(parent==='extract'&&child.key.startsWith('cpue_'))y+=child.key==='cpue_vessel'?-12:12;
+   if(child.key.startsWith('assessment_'))y+=child.key.endsWith('_ref')?-10:10;
+   let m=(x+X)/2;
+   if(child.key==='synthesis'){
+    const i=child.parents.indexOf(parent),ports=[12,28,b.height-28,b.height-12];
+    Y=b.top+ports[i]-rect.top;m=x+(X-x)*([0,3].includes(i)?.68:.34);
+   }
+   points=Math.abs(y-Y)<1?[[x,y],[X,Y]]:[[x,y],[m,y],[m,Y],[X,Y]];
+  }
+  path.setAttribute('d',roundedRoute(points));path.classList.toggle('preview',!!selected&&inPath&&!muted);path.classList.toggle('muted',!!muted);
+  const blocked=failedQC&&parent==='qc',running=!expected&&!sending&&!muted&&!reusedInput&&child.status==='running';
+  path.classList.toggle('blocked-edge',blocked);path.classList.toggle('active',running);
+  if(!blocked)path.setAttribute('marker-end','url(#arrow-'+(muted?'muted':running?'active':selected&&inPath?'selected':'base')+')');
   svg.append(path);
  }
  root.append(svg);
 }
 new ResizeObserver(()=>requestAnimationFrame(()=>{links();if(previewKey)showPreview(previewKey);if($('sql-view').open)placePopup($('sql-view'),node('extract'));})).observe($('chain'));
 function friendlyStep(name){if(name==='Retrieve locked analysis modules')return 'Load six code repositories at locked commits';if(name==='Prepare the pinned Docker environment')return 'Pull container image';if(name==='Checkout')return 'Check out analysis code';if(name==='Checkout source data')return 'Check out data settings';if(name==='Fetch versioned database snapshot')return 'Download the recorded data release';if(name==='Set up job')return 'Start runner';if(name==='Save the complete workflow outputs')return 'Save outputs';const stage=data?.stages.find(s=>s._step_number===data.execution?.jobs?.[0]?.steps.find(x=>x.name===name)?.number);return stage?names[stage.key]+(name.endsWith(' · reused')?' · reused':''):name;}
-function showConsole(){if(!data)return;if(data.has_run===false){$('console-title').textContent='Ready for a new demonstration';$('console-lines').textContent='The previous execution records have been cleared.';$('console-link').removeAttribute('href');return;}const steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),actual=consoleRecord?.run_id===data.run_id&&consoleRecord?.attempt===data.attempt;let lines=[];if(actual){$('console-title').textContent='GitHub console · completed run';lines=consoleRecord.lines.map(line=>line.replace(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s*/,(_,t)=>time(t)+'  '));}else{$('console-title').textContent='Live GitHub step record';for(const s of steps)if(s.started_at&&['in_progress','completed'].includes(s.status))lines.push(time(s.started_at)+'  '+(s.status==='completed'?(s.conclusion==='success'?'✓':s.name.endsWith(' · reused')?'↺':'×'):'▶')+' '+s.name);if(!lines.length)lines=['Waiting for GitHub to assign a runner.'];}if(expected){$('console-title').textContent='Update stored · waiting for GitHub';lines=[expected.startsWith('db-')?'Database release '+expected.slice(3):'Settings commit '+expected.slice(0,8),'The update triggers the workflow in the analysis repository.'];}const qc=data.data_intake?.quality_check,qcView=qc&&(!qc.accepted||selected==='data');if(qcView){$('console-title').textContent='Data quality check · Database';lines=qualityRecord();}const text=lines.join('\n'),el=$('console-lines');if(el.textContent!==text){el.textContent=text;el.scrollTop=el.scrollHeight;}$('console-link').href=data.run_url;$('console-link').textContent=qcView&&!qc.accepted?'Previous GitHub run ↗':'View run ↗';}
+function showConsole(){if(!data)return;if(qualityRecordOpen){showQualityRecord();return;}if(data.has_run===false){$('console-title').textContent='Ready for a new demonstration';$('console-lines').textContent='The previous execution records have been cleared.';$('console-link').removeAttribute('href');return;}const steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),actual=consoleRecord?.run_id===data.run_id&&consoleRecord?.attempt===data.attempt;let lines=[];if(actual){$('console-title').textContent='GitHub console · completed run';lines=consoleRecord.lines.map(line=>line.replace(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s*/,(_,t)=>time(t)+'  '));}else{$('console-title').textContent='Live GitHub step record';for(const s of steps)if(s.started_at&&['in_progress','completed'].includes(s.status))lines.push(time(s.started_at)+'  '+(s.status==='completed'?(s.conclusion==='success'?'✓':s.name.endsWith(' · reused')?'↺':'×'):'▶')+' '+s.name);if(!lines.length)lines=['Waiting for GitHub to assign a runner.'];}if(expected){$('console-title').textContent='Update stored · waiting for GitHub';lines=[expected.startsWith('db-')?'Database release '+expected.slice(3):'Settings commit '+expected.slice(0,8),'The update triggers the workflow in the analysis repository.'];}const qc=data.data_intake?.quality_check,qcView=qc&&(!qc.accepted||selected==='data');if(qcView){$('console-title').textContent='Data quality check · Database';lines=qualityRecord();}const text=lines.join('\n'),el=$('console-lines');if(el.textContent!==text){el.textContent=text;el.scrollTop=el.scrollHeight;}$('console-link').href=data.run_url;$('console-link').textContent=qcView&&!qc.accepted?'Previous GitHub run ↗':'View run ↗';}
 async function loadConsole(){if(data.has_run===false||consolePending||data.status!=='completed'||(consoleRecord?.run_id===data.run_id&&consoleRecord?.attempt===data.attempt))return;consolePending=true;try{const r=await fetch('/api/console',{cache:'no-store'});if(r.ok){const next=await r.json();if(next.ready&&next.lines.length)consoleRecord=next;}}catch{}finally{consolePending=false;showConsole();}}
 function notice(text){$('notice-text').textContent=text;$('notice').hidden=false;}
 function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),active=steps.find(s=>s.status==='in_progress'),reused=data.stages.filter(s=>s.reused).length,busy=sending||!!expected||data.status!=='completed',stale=data.source?.stale,cloudBlocked=data.session&&!data.session.can_update;
  $('run-link').textContent=data.has_run===false?'Ready':'Run #'+data.number;$('run-link').href=data.run_url;$('run-state').textContent=data.demo?.phase==='cleaning'?'Resetting…':data.has_run===false?'Ready for a fresh demonstration':stale?'Last verified state':expected?'New run pending':data.status==='completed'?(data.conclusion==='success'?'Complete · '+(data.stages.length-reused)+' run · '+reused+' reused':data.conclusion):data.stages.filter(s=>s.status==='running').length>1?data.stages.filter(s=>s.status==='running').length+' analyses running in parallel':data.status.replaceAll('_',' ');$('live-dot').className='dot '+(busy?'live':data.conclusion==='success'?'success':'');
  const source=node('data');source.classList.toggle('selected',selected==='data');source.querySelector('.node-control').setAttribute('aria-pressed',String(selected==='data'));const qc=data.data_intake?.quality_check,version=data.database_version||(data.data_intake?.published?qc?.proposed_version:null);source.querySelector('.release').textContent=version?'v'+version:'Versioned data';source.querySelector('.qc').textContent=sending&&changeKind==='data'?'Checking QC…':qc?(qc.accepted?'✓ QC passed':'× QC failed'):'QC before release';if(Number(version)>=2024&&(!qc||qc.accepted))source.querySelector('.qc').textContent='✓ One added batch';source.querySelector('.qc').classList.toggle('failed',!!qc&&!qc.accepted);
  for(const s of data.stages){const el=node(s.key),state=expected?(impact.has(s.key)||!selected?'waiting':s.status):s.status;el.className='stage '+state+(s.reused&&!expected?' reused':'')+(selected&&impact.has(s.key)?' impacted':'')+(selected&&!impact.has(s.key)?' outside-impact':'')+(selected===s.key?' selected':'');el.querySelector('.state-icon').textContent=s.reused&&!expected?'↺':icons[state]||'·';el.querySelector('.state-label').textContent=s.reused&&!expected?'Reused':states[state]||state;el.querySelector('.node-control').setAttribute('aria-pressed',String(selected===s.key));el.title=(s.parents.length?'Inputs: '+s.parents.map(p=>names[p]).join(' + '):'Input: accepted database release')+' · select to update downstream';}
- const count=selected?impact.size:data.stages.length,pendingCount=new Set([key,...Object.keys(pendingBranches())]).size,replayData=key==='data'&&Number(data.database_version)>=2024;
+ const count=selected?data.stages.filter(s=>impact.has(s.key)).length:data.stages.length,pendingCount=new Set([key,...Object.keys(pendingBranches())]).size,replayData=key==='data'&&Number(data.database_version)>=2024;
  $('selection-title').textContent=key==='data'?(replayData?'Replay data update':'New data'):names[key]+(key.startsWith('prepare_')||key.startsWith('assessment_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
  $('progress').textContent=(data.has_run===false&&!data.baseline_available&&key!=='data'?'Prepare initial inputs → ':key==='data'?(replayData?'Replay the accepted data update → ':'Add one batch → QC → '):pendingCount>1?pendingCount+' starting stages → ':'Run this stage → ')+count+' stages run'+(count<data.stages.length?' · '+(data.stages.length-count)+' kept':'');
- for(const item of ['data',...data.stages.map(s=>s.key)])sourceLink(item);
+ for(const item of ['data',...data.stages.map(s=>s.key)])sourceLink(item);drawBranchButton(busy);
  $('data-picker').hidden=key!=='data';
  if(key==='data'){const choices=[...(data.data_versions||[2023]).map(v=>[String(v),'Release '+v]),['new',Number(data.latest_database_version)>=2024?'Replay new-data update':'Add checked batch']];const signature=JSON.stringify(choices);if($('data-version').dataset.choices!==signature){$('data-version').replaceChildren(...choices.map(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;return option;}));$('data-version').dataset.choices=signature;}$('data-version').value=dataDraft||'new';}
  $('sql-button').hidden=key!=='extract';$('sql-button').disabled=!nextSource('extract');
  drawBranches(key,busy);
  $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?(replayData?'Replay data update →':'Add data + run →'):pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&dataDraft&&dataDraft!=='new'){$('selection-title').textContent='Data release '+dataDraft;$('progress').textContent='Restore this snapshot → 11 stages run';$('run').textContent=busy?'Starting…':'Run with v'+dataDraft+' →';}
- $('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||!data.database_connected;$('invalid').disabled=busy||!!stale;
+ $('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||dataDraft!=='new'||!data.database_connected;$('invalid').disabled=busy||!!stale;
  $('record-dot').className=$('live-dot').className;$('verified').textContent=time(data.source?.last_success);$('message').className='';
  $('message').textContent=sending?(changeKind==='data'?'Validate and publish incoming data…':'Commit the selected update…'):expected?'Update stored → waiting for the next GitHub run':stale?'Connection interrupted · showing the last verified run':active?'Running on GitHub · '+(data.stages.filter(s=>s.status==='running').map(s=>names[s.key]).join(' + ')||friendlyStep(active.name)):data.status==='completed'?(data.conclusion==='success'?'✓ Outputs saved · report ready':'GitHub run '+data.conclusion):'GitHub is assigning a runner…';
  if(data.has_run===false&&!busy){$('message').textContent='Ready · verified baseline inputs available';$('run-link').removeAttribute('href');}
  if(data.demo?.reset_at&&!busy){const seconds=Math.max(0,Math.ceil((Date.parse(data.demo.reset_at)-Date.now())/1000));$('message').textContent+=' · resets in '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');}
  if(cloudBlocked&&!busy&&!stale){$('message').textContent=data.session.message.includes('owner')?'Viewing only · owner GitHub connection needed':data.session.message;$('message').className='read-only';}
  if(qc&&!qc.accepted&&!busy){$('message').textContent='QC rejected the batch · data and GitHub run unchanged';}
- requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
+ drawQuality();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
 async function refresh(force=false){if(window.workshopActive===false||refreshing)return;if(!force&&data?.status==='completed'&&!expected&&Date.now()-lastRefresh<10000)return;refreshing=true;lastRefresh=Date.now();try{const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw Error();const next=await r.json();if(!next.ready)throw Error();data=next;if(data.has_run===false&&!expected){consoleRecord=null;$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}if(expected===data.commit||(data.database_version&&expected==='db-'+data.database_version)){expected='';loadBranches();}draw();}catch{$('message').textContent='Live connection unavailable · retrying';$('run').disabled=true;}finally{refreshing=false;}}
 function drawBranches(key,busy){
  const choices=branchCatalog?.options[key]||{},entries=Object.entries(choices),picker=$('branch');
@@ -164,8 +211,48 @@ function drawBranches(key,busy){
   picker.dataset.stage=key;picker.dataset.options=entries.map(([b])=>b).join(',');
  }
  picker.value=preferred;picker.disabled=busy;
- const source=choices[preferred];$('branch-commit').textContent=source.commit.slice(0,8)+' ↗';$('branch-commit').href='https://github.com/'+source.repository+'/commit/'+source.commit;
+ const source=choices[preferred];$('branch-commit').textContent=source.commit.slice(0,8)+' ↗';$('branch-commit').href='https://github.com/'+source.repository+'/commit/'+source.commit;$('branch-commit').onclick=e=>{e.preventDefault();openSource(key);};
  $('branch-picker').title='Each stage has its own branch. Run applies all pending choices together.';
+}
+function stageTitle(key){return names[key]+(key.startsWith('prepare_')||key.startsWith('assessment_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');}
+function branchStages(){const impact=selected?affected():new Set(data?.stages.map(s=>s.key)||[]);return (data?.stages||[]).filter(s=>impact.has(s.key));}
+function drawBranchButton(busy){
+ let button=$('branch-list-button');if(!button){button=document.createElement('button');button.id='branch-list-button';button.onclick=()=>{hidePreview();drawBranchList();$('branch-view').showModal();};$('run').before(button);}
+ button.textContent='All branches · '+branchStages().length;button.disabled=busy||!branchCatalog;
+}
+function drawBranchList(){
+ const title=selectedKey()==='data'?'Database':stageTitle(selectedKey());$('branch-heading').textContent='Branches from '+title;
+ $('branch-scope').textContent='Start stays at '+title+'. Choose each stage’s branch, then run the connected path.';
+ $('branch-rows').replaceChildren(...branchStages().map(stage=>{
+  const row=document.createElement('div');row.className='branch-row';row.dataset.stage=stage.key;
+  const label=document.createElement('label'),picker=document.createElement('select'),link=document.createElement('a');
+  picker.id='choose-'+stage.key;label.htmlFor=picker.id;label.textContent=stageTitle(stage.key);picker.setAttribute('aria-label',stageTitle(stage.key)+' branch');
+  const options=branchCatalog?.options[stage.key]||{};picker.replaceChildren(...Object.keys(options).map(branch=>{const option=document.createElement('option');option.value=branch;option.textContent=branch;return option;}));
+  picker.value=branchDrafts[stage.key]||branchCatalog?.sources[stage.key]?.branch||Object.keys(options)[0];
+  const update=()=>{const source=options[picker.value];link.textContent=source?.commit.slice(0,8)+' ↗';link.href=source?'https://github.com/'+source.repository+'/commit/'+source.commit:'#';};
+  picker.onchange=()=>{branchDrafts[stage.key]=picker.value;update();draw();};
+  link.onclick=e=>{e.preventDefault();openSource(stage.key);};update();row.append(label,picker,link);return row;
+ }));
+}
+$('branch-close').onclick=$('branch-done').onclick=()=>$('branch-view').close();
+const sourceCache=new Map();let sourceTicket=0;
+$('source-close').onclick=()=>$('source-view').close();
+async function openSource(key){
+ hidePreview();const ticket=++sourceTicket,body=$('source-body');$('source-title').textContent=key==='data'?'Database':'Code repository · '+stageTitle(key);$('source-meta').textContent='';body.replaceChildren();$('source-view').showModal();
+ if(key==='data'){
+  $('source-meta').textContent='Supabase · saved snapshot · read-only records';const frame=document.createElement('iframe');frame.title='Database snapshot preview';frame.setAttribute('sandbox','allow-scripts allow-same-origin');frame.referrerPolicy='no-referrer';frame.src='https://kyuhank.github.io/cpue-actions-demo/data.html?version='+(dataDraft&&dataDraft!=='new'?dataDraft:data?.database_version||2023);body.append(frame);return;
+ }
+ const source=nextSource(key);if(!source||!/^kyuhank\/cpue-demo-(extract|cpue|inputs|assessment|synthesis|report)$/.test(source.repository)||!/^[a-f0-9]{40}$/.test(source.commit)){body.textContent='Loading the registered source. Try again in a moment.';return;}
+ $('source-meta').textContent=source.repository+' · '+source.branch+' · '+source.commit.slice(0,12);
+ const picker=document.createElement('select'),code=document.createElement('pre');picker.id='source-file';picker.setAttribute('aria-label','Repository file');body.append(picker,code);
+ const base='https://raw.githubusercontent.com/'+source.repository+'/'+source.commit+'/';
+ const load=async()=>{const file=picker.value;code.textContent='Loading '+file+'…';try{const url=base+file.split('/').map(encodeURIComponent).join('/');let text=sourceCache.get(url);if(text===undefined){const r=await fetch(url,{signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error('The file is temporarily unavailable.');text=(await r.text()).slice(0,60000);sourceCache.set(url,text);}if(ticket===sourceTicket&&picker.value===file)code.textContent=text;}catch(e){if(ticket===sourceTicket)code.textContent=e.message;}};
+ picker.onchange=load;
+ // All files come from the fixed public module and the selected, registered commit.
+ let files=['README.md'];
+ try{const url='https://api.github.com/repos/'+source.repository+'/git/trees/'+source.commit;let tree=sourceCache.get(url);if(!tree){const r=await fetch(url,{signal:AbortSignal.timeout(10000)});if(r.ok){tree=await r.json();sourceCache.set(url,tree);}}if(tree?.tree)files=tree.tree.filter(f=>f.type==='blob'&&/\.(md|py|sql|json|yml|qmd)$/.test(f.path)).map(f=>f.path).sort((a,b)=>a==='README.md'?-1:b==='README.md'?1:a.localeCompare(b));}catch{}
+ if(ticket!==sourceTicket)return;
+ picker.replaceChildren(...files.map(file=>{const option=document.createElement('option');option.value=file;option.textContent=file;return option;}));load();
 }
 async function loadBranches(){if(branchLoading)return;branchLoading=true;try{const response=await fetch('/api/branches',{cache:'no-store'});if(response.ok){branchCatalog=await response.json();if(data)draw();}}catch{}finally{branchLoading=false;}}
 $('branch').onchange=()=>{branchDrafts[selectedKey()]=$('branch').value;hidePreview();draw();};
@@ -175,7 +262,7 @@ async function publish(invalid=false){
  const stage=selectedKey(),choices=pendingBranches();
  if(stage!=='data'&&branchCatalog?.options[stage])choices[stage]=$('branch').value;
  if(!invalid&&!branchCatalog){notice('Loading registered branches. Please try again in a moment.');loadBranches();return;}
- runRoots=[...new Set([dataDraft&&dataDraft!=='new'&&Number(dataDraft)!==Number(data.database_version)?'data':stage,...Object.keys(choices)])];hidePreview();sending=true;changeKind=stage;$('notice').hidden=true;draw();
+ qualityRecordOpen=false;runRoots=[...new Set([dataDraft&&dataDraft!=='new'&&Number(dataDraft)!==Number(data.database_version)?'data':stage,...Object.keys(choices)])];hidePreview();sending=true;changeKind=stage;$('notice').hidden=true;draw();
  try{
   const r=await fetch(invalid?'/api/check-invalid-data':'/api/run',{method:'POST',headers:{'Content-Type':'application/json','X-Workshop-Action':'publish-synthetic-data','X-Workshop-Request':crypto.randomUUID()},body:invalid?'{}':JSON.stringify({start:stage,branches:choices,...(dataDraft&&dataDraft!=='new'?{data_version:Number(dataDraft)}:{})})}),result=await r.json();
   if(!r.ok)throw Error(result.detail||'Update failed');
@@ -198,7 +285,7 @@ $('sql-button').onclick=async()=>{
  if($('sql-view').open)placePopup($('sql-view'),node('extract'));
 };
 $('data-version').onchange=()=>{dataDraft=$('data-version').value;draw();};
- $('run').onclick=()=>publish();$('invalid').onclick=()=>publish(true);$('logs').onclick=()=>{$('console').hidden=!$('console').hidden;$('logs').setAttribute('aria-expanded',String(!$('console').hidden));$('logs').textContent=$('console').hidden?'Show record':'Hide record';showConsole();};$('dismiss').onclick=()=>{$('notice').hidden=true;};
+ $('run').onclick=()=>publish();$('invalid').onclick=()=>publish(true);$('logs').onclick=()=>{qualityRecordOpen=false;$('console').hidden=!$('console').hidden;$('logs').setAttribute('aria-expanded',String(!$('console').hidden));$('logs').textContent=$('console').hidden?'Show record':'Hide record';showConsole();};$('dismiss').onclick=()=>{$('notice').hidden=true;};
 if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');refresh();loadBranches();setInterval(refresh,2000);
 async function heartbeat(){try{const r=await fetch('/api/presentation-info',{cache:'no-store'});if(r.ok&&(await r.json()).presentation==='cpue-workshop'&&parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');}catch{}}
 heartbeat();setInterval(heartbeat,4000);

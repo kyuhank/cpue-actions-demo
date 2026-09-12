@@ -18,7 +18,7 @@ async function load(version=''){
   snapshot=result.snapshot;page=0;
   $('source').textContent=result.provider+' · Database snapshot v'+snapshot.version;
   $('counts').textContent=snapshot.sets.length.toLocaleString('en')+' sets · '+snapshot.removals.length+' annual catch records';
-  $('version').replaceChildren(...[2023,...(result.current_version>=2024?[2024]:[])].map(value=>{const option=document.createElement('option');option.value=value;option.textContent='v'+value;return option;}));$('version').value=snapshot.version;$('version').disabled=false;
+  $('version').replaceChildren(...(result.versions||[2023]).map(value=>{const option=document.createElement('option');option.value=value;option.textContent='v'+value;return option;}));$('version').value=snapshot.version;$('version').disabled=false;
   const url=new URL(location.href);url.searchParams.set('version',snapshot.version);history.replaceState(null,'',url);draw();
  }catch(error){const link=document.createElement('a');link.href='./data.html';link.textContent='Open current snapshot ↗';$('error').replaceChildren(document.createTextNode(error.message+' '),link);$('error').hidden=false;$('source').textContent='Database connection unavailable';}
 }

@@ -17,8 +17,8 @@ async function status(){
    if(m.github_run_id==s.run_id&&(m.configuration?.git_commit||m.workflow_plan?.trigger_commit)===s.commit){s.database_version=Number(m.source_version);if(!intake&&m.data_release?.quality_check)intake={quality_check:m.data_release.quality_check,published:true,checked_at:Date.parse(m.data_release.published_at||s.created_at)/1000};}
   }catch{/* The run state remains available while the report is being published. */}
  }
- if(!s.has_run)intake=null;
- return {...s,demo,data_versions:database.version>=2024?[2023,2024]:[2023],latest_database_version:database.version,database_connected:true,data_intake:intake,session:{can_update:can,remaining:limits.remaining,next_update:limits.next_update,message:!enabled()?'Cloud execution is awaiting the owner’s restricted GitHub connection.':demo.phase==='cleaning'?'Resetting the demonstration. The next run will start from the baseline.':pending?'The update is stored; waiting for GitHub to acknowledge the next run.':limits.remaining===0?'Daily limit reached. You can still inspect the current run.':!can?'Wait for the current run and the short update interval.':`${limits.remaining} shared updates available today.`}};
+ if(!s.has_run&&intake&&(intake.published||intake.checked_at*1000<=Date.parse(demo.last_reset_at||'1970-01-01')))intake=null;
+ return {...s,demo,data_versions:database.version>=2024?[2021,2022,2023,2024]:[2021,2022,2023],latest_database_version:database.version,database_connected:true,data_intake:intake,session:{can_update:can,remaining:limits.remaining,next_update:limits.next_update,message:!enabled()?'Cloud execution is awaiting the owner’s restricted GitHub connection.':demo.phase==='cleaning'?'Resetting the demonstration. The next run will start from the baseline.':pending?'The update is stored; waiting for GitHub to acknowledge the next run.':limits.remaining===0?'Daily limit reached. You can still inspect the current run.':!can?'Wait for the current run and the short update interval.':`${limits.remaining} shared updates available today.`}};
 }
 export async function handle(request:Request){
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
@@ -36,12 +36,12 @@ export async function handle(request:Request){
    if(path==='/api/branches')return reply(await cached('branches',10,branches));
    if(path==='/api/database'){
     const raw=u.searchParams.get('version');
-    if([...u.searchParams.keys()].some(k=>k!=='version')||u.searchParams.getAll('version').length>1||(raw!==null&&!['2023','2024'].includes(raw)))return reply({detail:'Choose the baseline or the one added demonstration batch.'},400);
+    if([...u.searchParams.keys()].some(k=>k!=='version')||u.searchParams.getAll('version').length>1||(raw!==null&&!['2021','2022','2023','2024'].includes(raw)))return reply({detail:'Choose a saved demonstration snapshot.'},400);
     const latest=await cached('database:current',10,()=>rpc('cpue_snapshot',{p_version:null}));
     const version=raw?Number(raw):latest.version;
     if(version>latest.version)return reply({detail:'This demonstration release has expired. Open the current database or use the snapshot saved in its report.'},404);
     const snapshot=version===latest.version?latest:await cached('database:'+version,3600,()=>rpc('cpue_snapshot',{p_version:version}));
-    return reply({provider:'Supabase · PostgreSQL',current_version:latest.version,snapshot});
+    return reply({provider:'Supabase · PostgreSQL',current_version:latest.version,versions:latest.version>=2024?[2021,2022,2023,2024]:[2021,2022,2023],snapshot});
    }
 
    if(path==='/api/stage-log'){

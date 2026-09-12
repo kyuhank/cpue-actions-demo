@@ -52,7 +52,7 @@ export function mapRun(run:any,jobs:any[]){
 }
 export function emptyRun(){return {ready:true,has_run:false,baseline_available:true,stages:definitions.map(([key,label,parents])=>({key,label:label.slice(3),parents,status:'waiting',reused:false,source_id:'',_step_number:null})),run_id:null,number:null,attempt:null,run_url:'',commit:'',status:'completed',conclusion:'success',database_version:2023,execution:{mode:'steps',job_count:0,jobs:[]},source:{stale:false,last_success:new Date().toISOString()},created_at:null,completed_at:null};}
 type ModuleSource={repository:string,branch:string,commit:string};
-const moduleCache = new Map<string,{sources:Record<string,ModuleSource>,options:Record<string,Record<string,ModuleSource>>}>();
+const moduleCache = new Map<string,{sources:Record<string,ModuleSource>,options:Record<string,Record<string,ModuleSource>>,dataVersion?:number}>();
 export function validSource(key:string,source:any):source is ModuleSource{
  const part=key.split('_')[0],repo=({prepare:'inputs'} as Record<string,string>)[part]||part;
  return changeable.has(key as any)&&source?.repository==='kyuhank/cpue-demo-'+repo&&/^[a-f0-9]{40}$/.test(source.commit)&&/^[a-z0-9-]{1,60}$/.test(source.branch);
@@ -82,12 +82,13 @@ async function moduleConfiguration(triggerCommit:string){
   if(optional&&r.status===404)return {};
   if(!r.ok)throw Error('Module versions are unavailable.');return r.json();
  }
- const [locked,catalog,config]=await Promise.all([read('modules.lock.json'),read('module-branches.json',true),github(`contents/config/modules.json?ref=${triggerCommit}`,'GET',undefined,true)]);
+ const [locked,catalog,config,dataConfig]=await Promise.all([read('modules.lock.json'),read('module-branches.json',true),github(`contents/config/modules.json?ref=${triggerCommit}`,'GET',undefined,true),github(`contents/config/data.json?ref=${triggerCommit}`,'GET',undefined,true)]);
  const selections=config.ok?JSON.parse(atob((await config.json()).content.replace(/\s/g,''))):{};
- const result=selectedModules(locked,catalog,selections);
+ const rawData=dataConfig.ok?JSON.parse(atob((await dataConfig.json()).content.replace(/\s/g,''))):{};
+ const result={...selectedModules(locked,catalog,selections),dataVersion:[2023,2024].includes(rawData.version)?rawData.version:undefined};
  if(moduleCache.size>=16)moduleCache.clear();moduleCache.set(triggerCommit,result);return result;
 }
-async function runModules(run:any){try{return (await moduleConfiguration(run.head_sha)).sources;}catch{return {};}}
+async function runModules(run:any){try{return await moduleConfiguration(run.head_sha);}catch{return {sources:{} as Record<string,ModuleSource>,dataVersion:undefined};}}
 export async function branches(){
  const branch=await github('git/ref/heads/'+DEMO_BRANCH,'GET',undefined,true);
  const head=branch.ok?await branch.json():await json('git/ref/heads/main');
@@ -95,7 +96,7 @@ export async function branches(){
 }
 export async function current(){const runs=(await json('actions/workflows/update.yml/runs?per_page=1')).workflow_runs;
  if(!runs.length)return emptyRun();const r=runs[0];const [jobs,sources]=await Promise.all([json(`actions/runs/${r.id}/attempts/${r.run_attempt}/jobs?per_page=100`),runModules(r)]);
- const result=mapRun(r,jobs.jobs);return {...result,stages:result.stages.map(s=>({...s,code_source:sources[s.key]}))};
+ const result=mapRun(r,jobs.jobs);return {...result,database_version:result.database_version||sources.dataVersion||null,stages:result.stages.map(s=>({...s,code_source:sources.sources[s.key]}))};
 }
 export async function ensureBranch(){
  const existing=await github('git/ref/heads/'+DEMO_BRANCH,'GET',undefined,true);

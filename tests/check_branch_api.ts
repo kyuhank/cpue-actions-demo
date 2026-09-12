@@ -26,7 +26,7 @@ Deno.test('A mixed branch run atomically commits two fixed configuration paths a
   assert(path.startsWith('/repos/kyuhank/cpue-toy-data/'));
   if(path.endsWith('/git/ref/heads/demo-runtime'))return Response.json({object:{sha:head}});
   if(path.endsWith('/contents/.github/workflows/update.yml'))return Response.json({content:btoa('uses: kyuhank/cpue-actions-demo/.github/workflows/toy-pipeline.yml@'+core)});
-  if(path.endsWith('/contents/config/modules.json'))return content({});
+  if(path.endsWith('/contents/config/modules.json')||path.endsWith('/contents/config/data.json'))return content({});
   if(path.endsWith('/contents/config/stages.json'))return content({cpue_vessel:{min_hooks:0},cpue_year:{min_hooks:2000}});
   if(path.endsWith('/git/commits/'+head))return Response.json({tree:{sha:'f'.repeat(40)}});
   if(path.endsWith('/git/trees'))return Response.json({sha:'1'.repeat(40)});

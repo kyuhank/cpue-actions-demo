@@ -7,6 +7,9 @@ from workflow_plan import hashes
 ROOT=Path.cwd();mode,key,part=sys.argv[1:]
 if key not in FILES or REPOS[key.split('_')[0]]!=part:raise SystemExit('Unknown module stage')
 if mode=='prepare':
+ if os.getenv('WORKSHOP_GROUP_BARRIER') == '1':
+  from stage_barrier import wait_for_group
+  wait_for_group(key, ROOT)
  for path in sorted((ROOT/'transfers').glob('*.tar.gz')):
   if not re.fullmatch(r'stage-\d+-[a-z_]+\.tar\.gz',path.name):raise SystemExit('Unknown input artifact')
   with tarfile.open(path) as archive:archive.extractall(ROOT,filter='data')

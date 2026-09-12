@@ -1,4 +1,4 @@
-const $=id=>document.getElementById(id),states={waiting:'Waiting for inputs',idle:'Queued',queued:'Queued',running:'Running',completed:'Complete',failed:'Failed',blocked:'Blocked',cancelled:'Cancelled'};
+const $=id=>document.getElementById(id),states={not_requested:'Not requested',waiting:'Waiting for inputs',idle:'Queued',queued:'Queued',running:'Running',completed:'Complete',failed:'Failed',blocked:'Blocked',cancelled:'Cancelled'};
 let data=null,selected='cpue_vessel',view='tasks',outputSource='',fileTicket=0,downloadURL='';
 let jobKey='',jobTab='outputs',jobLogBusy=false;
 const names={submission:'Data submission',qc:'Data QC',ingest:'Prepare & load',cpue_summary:'CPUE results summary',cpue_report:'CPUE report',extract:'Extract',cpue_vessel:'CPUE analysis A',cpue_year:'CPUE analysis B',prepare_vessel:'Input prep A',prepare_year:'Input prep B',assessment_vessel_ref:'Assessment A · config 1',assessment_vessel_high_m:'Assessment A · config 2',assessment_year_ref:'Assessment B · config 1',assessment_year_high_m:'Assessment B · config 2',synthesis:'Results summary',report:'Assessment report'};

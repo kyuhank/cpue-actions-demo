@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id);
 const positions={cpue_summary:[7,1,5],cpue_report:[7,1,5],data:[1,1,5],extract:[3,1,5],cpue_vessel:[5,1,3],cpue_year:[5,3,5],prepare_vessel:[9,1,3],prepare_year:[9,3,5],assessment_vessel_ref:[11,1,2],assessment_vessel_high_m:[11,2,3],assessment_year_ref:[11,3,4],assessment_year_high_m:[11,4,5],synthesis:[13,1,5],report:[15,1,5]};
 const names={submission:'Data submission',qc:'QC',ingest:'Prepare & load',cpue_summary:'Results summary',cpue_report:'CPUE report',data:'Database',extract:'Extract',cpue_vessel:'CPUE analysis A',cpue_year:'CPUE analysis B',prepare_vessel:'Input prep',prepare_year:'Input prep',assessment_vessel_ref:'Assessment 1',assessment_vessel_high_m:'Assessment 2',assessment_year_ref:'Assessment 1',assessment_year_high_m:'Assessment 2',synthesis:'Results summary',report:'Assessment report'};
-const states={waiting:'Waiting',queued:'Queued',idle:'Queued',running:'Running',completed:'Complete',failed:'Failed',blocked:'Blocked',cancelled:'Cancelled'},icons={completed:'✓',running:'◌',failed:'×',blocked:'×',cancelled:'–'};
+const states={not_requested:'Not requested',waiting:'Waiting',queued:'Queued',idle:'Queued',running:'Running',completed:'Complete',failed:'Failed',blocked:'Blocked',cancelled:'Cancelled'},icons={completed:'✓',running:'◌',failed:'×',blocked:'×',cancelled:'–'};
 let qualityRecordOpen=false,qualityAlertStamp=null;
 let previewLog=null,previewLogPending=false,previewLogAt=0;
 let dataDraft=null;

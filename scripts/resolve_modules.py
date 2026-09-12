@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import urllib.request
@@ -13,8 +14,8 @@ FILES = {
     'extract': {'extract.py': 'extract.py', 'extract.sql': 'extract.sql', 'extract-catch.sql': 'extract-catch.sql'},
     'cpue_vessel': {'cpue.py': 'cpue_vessel.py'},
     'cpue_year': {'cpue.py': 'cpue_year.py'},
-    'prepare_vessel': {'prepare_inputs.py': 'prepare_inputs.py'},
-    'prepare_year': {'prepare_inputs.py': 'prepare_inputs.py'},
+    'prepare_vessel': {'prepare_inputs.py': 'prepare_vessel.py'},
+    'prepare_year': {'prepare_inputs.py': 'prepare_year.py'},
     **{key: {'assessment.py': key + '.py'} for key in ('assessment_vessel_ref', 'assessment_vessel_high_m', 'assessment_year_ref', 'assessment_year_high_m')},
     'synthesis': {'synthesis.py': 'synthesis.py', 'collect_results.py': 'collect_results.py'},
     'report': {'report.py': 'report.py', 'reproduction.py': 'reproduction.py'},
@@ -22,8 +23,26 @@ FILES = {
 REPOS = {'extract': 'extract', 'cpue': 'cpue', 'prepare': 'inputs', 'assessment': 'assessment', 'synthesis': 'synthesis', 'report': 'report'}
 
 
+def selected_sources(root=ROOT):
+    locked = json.loads((root / 'modules.lock.json').read_text())
+    catalog = json.loads((root / 'module-branches.json').read_text())
+    selection_path = (root / os.getenv('TOY_STAGE_CONFIG', 'config/stages.json')).with_name('modules.json')
+    selections = json.loads(selection_path.read_text()) if selection_path.exists() else {}
+    if not isinstance(selections, dict) or set(selections) - set(FILES):
+        raise ValueError('Unknown workshop module selection')
+    for key, selection in selections.items():
+        if (not isinstance(selection, dict) or set(selection) != {'branch', 'request'}
+                or not isinstance(selection['branch'], str)
+                or selection['branch'] not in catalog.get(key, {})
+                or not isinstance(selection['request'], str)
+                or not re.fullmatch('[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}', selection['request'])):
+            raise ValueError('Only registered branches and explicit workshop requests are accepted')
+        locked[key] = {**catalog[key][selection['branch']], 'requested_revision': selection['request']}
+    return locked
+
+
 def resolve():
-    locked = json.loads((ROOT / 'modules.lock.json').read_text())
+    locked = selected_sources()
     if set(locked) != set(FILES):
         raise ValueError('The module lock must identify every workflow stage')
     requests = set()
@@ -66,6 +85,7 @@ def resolve():
     for target, content in assembled.items():
         (ROOT / 'pipeline' / target).write_bytes(content)
     # Keep the small local example compatible with the same module sources.
+    (ROOT / 'pipeline/prepare_inputs.py').write_bytes(assembled['prepare_vessel.py'])
     (ROOT / 'pipeline/cpue.py').write_bytes(assembled['cpue_vessel.py'])
     (ROOT / 'pipeline/assessment.py').write_bytes(assembled['assessment_vessel_ref.py'])
     (ROOT / 'module-versions.json').write_text(json.dumps(versions, indent=2) + '\n')

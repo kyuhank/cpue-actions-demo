@@ -24,7 +24,7 @@ on:
         type: string
   push:
     branches: [main]
-    paths: ['data/**', 'pipeline/**', 'scripts/**', 'modules.lock.json', '.github/workflows/toy-pipeline.yml']
+    paths: ['data/**', 'pipeline/**', 'scripts/**', 'modules.lock.json', 'module-branches.json', '.github/workflows/toy-pipeline.yml']
   workflow_dispatch:
 
 permissions:

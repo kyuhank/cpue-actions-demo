@@ -2,9 +2,9 @@ name: Checks
 
 on:
   push:
-    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'modules.lock.json', 'supabase/snapshot.py', '.github/workflows/checks.yml']
+    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'modules.lock.json', 'module-branches.json', 'supabase/snapshot.py', '.github/workflows/checks.yml']
   pull_request:
-    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'modules.lock.json', 'supabase/snapshot.py', '.github/workflows/checks.yml']
+    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'modules.lock.json', 'module-branches.json', 'supabase/snapshot.py', '.github/workflows/checks.yml']
 
 permissions:
   contents: read
@@ -28,3 +28,5 @@ jobs:
         run: python3 tests/check_reproduction.py
       - name: Verify module identity and downstream invalidation
         run: python3 tests/check_modules.py
+      - name: Verify selected branches and downstream execution
+        run: python3 tests/check_branch_selection.py

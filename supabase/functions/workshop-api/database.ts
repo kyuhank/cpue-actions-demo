@@ -9,4 +9,4 @@ export async function cached(key:string,seconds:number,load:()=>Promise<any>){
  const old=await rpc('workshop_cache_get',{p_key:key});if(old!==null)return old;
  const value=await load();await rpc('workshop_cache_put',{p_key:key,p_value:value,p_seconds:seconds});return value;
 }
-export async function invalidate(){await rpc('workshop_cache_put',{p_key:'status',p_value:{},p_seconds:0});}
+export async function invalidate(){await Promise.all(['status','branches'].map(p_key=>rpc('workshop_cache_put',{p_key,p_value:{},p_seconds:0})));}

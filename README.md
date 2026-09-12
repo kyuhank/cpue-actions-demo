@@ -13,11 +13,11 @@ flowchart LR
     A --> S[Results synthesis] --> R[Report]
 ```
 
-Analysis code lives in six repositories. CPUE alternatives use the `model-a` and `model-b` branches; assessment alternatives use `structure-1` and `structure-2`. [modules.lock.json](modules.lock.json) fixes the exact commits used together. Shared model utilities and orchestration live here. Adopting a module change means updating its locked commit; the workflow then invalidates that stage and its dependants.
+Analysis code lives in six repositories. CPUE alternatives use the `model-a` and `model-b` branches; assessment alternatives use `structure-1` and `structure-2`. [modules.lock.json](modules.lock.json) fixes the exact commits used together. Shared model utilities and orchestration live here. Adopting a module change means updating its registered commit and the data repository’s workflow pin; the workflow then invalidates that stage and its dependants.
 
 [Extraction](https://github.com/kyuhank/cpue-demo-extract) · [CPUE](https://github.com/kyuhank/cpue-demo-cpue) · [Inputs](https://github.com/kyuhank/cpue-demo-inputs) · [Assessment](https://github.com/kyuhank/cpue-demo-assessment) · [Synthesis](https://github.com/kyuhank/cpue-demo-synthesis) · [Report](https://github.com/kyuhank/cpue-demo-report)
 
-Select a stage to rerun it and its dependants. Verified, unchanged outputs are reused. Independent analyses run in parallel within one GitHub runner and a pinned container. The orchestration view exposes each stage’s outputs and execution records.
+Select a stage and a registered branch, then Run. [module-branches.json](module-branches.json) pins each choice to an exact commit; moving the branch later does not alter a saved run. The selected stage and its dependants run again. Verified, unchanged outputs are reused. Independent analyses run in parallel within one GitHub runner and a pinned container. The orchestration view exposes each stage’s outputs and execution records.
 
 A versioned baseline supports intermediate starts, including after reset. Visitor runs expire ten minutes after completion; the fixed baseline remains available. A downloaded report retains its synthetic snapshot, source code, settings and replay package.
 

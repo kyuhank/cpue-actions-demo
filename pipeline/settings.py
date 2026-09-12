@@ -17,6 +17,15 @@ def stage_settings():
         field, options = ('revision', (0, 1)) if key in rerunnable else ('min_hooks', (0, 2000)) if key.startswith('cpue_') else ('M', (0.20, 0.25, 0.30, 0.35))
         if not isinstance(value, dict) or set(value) != {field} or value[field] not in options:
             raise ValueError('Invalid workshop setting')
+    modules = ROOT / 'module-versions.json'
+    if modules.exists():
+        sources = json.loads(modules.read_text())
+        for key in ('cpue_vessel', 'cpue_year'):
+            minimum = sources.get(key, {}).get('specification', {}).get('min_hooks')
+            if minimum is not None:
+                if minimum not in (0, 2000):
+                    raise ValueError('Invalid CPUE branch specification')
+                values[key] = {'min_hooks': minimum, **values.get(key, {})}
     return values
 
 

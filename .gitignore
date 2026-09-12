@@ -38,3 +38,6 @@ pipeline/synthesis.py
 pipeline/collect_results.py
 pipeline/report.py
 pipeline/reproduction.py
+
+pipeline/prepare_vessel.py
+pipeline/prepare_year.py

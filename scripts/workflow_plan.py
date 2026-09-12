@@ -53,7 +53,7 @@ def stage_code_digest(key, sources):
     common = [ROOT / 'pipeline' / name for name in ('settings.py', 'choices.json', 'assessment_cases.json', 'age_model.py')]
     common += [ROOT / 'scripts' / name for name in ('run_stage.py', 'workflow_plan.py')]
     shared = digest(b''.join(str(p.relative_to(ROOT)).encode() + b'\0' + p.read_bytes() for p in common))
-    return digest(json.dumps({'shared': shared, 'module': sources[key]}, sort_keys=True).encode())
+    return digest(json.dumps({'shared': shared, 'module': {k: v for k, v in sources[key].items() if k != 'requested_revision'}}, sort_keys=True).encode())
 
 
 def fingerprints():
@@ -64,6 +64,8 @@ def fingerprints():
     for key, parents in PARENTS.items():
         inputs = {'code': stage_code_digest(key, sources), 'image': os.getenv('TOY_CONTAINER_IMAGE', 'local'),
                   'settings': config.get(key, {}), 'parents': {p: result[p] for p in parents}}
+        if sources.get(key, {}).get('requested_revision'):
+            inputs['requested_revision'] = sources[key]['requested_revision']
         if key == 'extract':
             inputs['source'] = digest(source.read_bytes())
         result[key] = digest(json.dumps(inputs, sort_keys=True).encode())

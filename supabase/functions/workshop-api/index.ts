@@ -1,4 +1,4 @@
-import {change,changeable,current,consoleLines,output,outputStage,outputNames,stageOutputs,ensureBranch} from './github.ts';
+import {changeBranch,branches,change,changeable,current,consoleLines,output,outputStage,outputNames,stageOutputs,ensureBranch} from './github.ts';
 import {rpc,cached,invalidate} from './database.ts';
 import {maintain,observe,pendingUpdate} from './lifecycle.ts';
 import batches from './batches.json' with {type:'json'};
@@ -32,6 +32,7 @@ export async function handle(request:Request){
   if(request.method==='GET'){
    if(path==='/api/presentation-info')return reply({presentation:'cpue-workshop',hosted:true,enabled:enabled()});
    if(path==='/api/status')return reply(await status());
+   if(path==='/api/branches')return reply(await cached('branches',10,branches));
    if(path==='/api/console'){const s=await status();if(!s.ready)return reply({ready:false,lines:[]});return reply(await cached('console:'+s.run_id+':'+s.attempt,3600,()=>consoleLines(s)));}
    if(path==='/api/output'||path==='/api/outputs'){
     const source=u.searchParams.get('job')||'',file=u.searchParams.get('file')||'';
@@ -46,12 +47,14 @@ export async function handle(request:Request){
    return reply({detail:'Unknown workshop route.'},404);
   }
   if(request.method!=='POST')return reply({detail:'Method not allowed.'},405);
-  const kind=path==='/api/update'?'data':path==='/api/check-invalid-data'?'invalid':path.startsWith('/api/change/')?path.slice('/api/change/'.length):'';
+  const branchMatch=path.match(/^\/api\/branch\/([a-z_]+)\/([a-z0-9-]{1,60})$/);
+  const kind=branchMatch?branchMatch[1]:path==='/api/update'?'data':path==='/api/check-invalid-data'?'invalid':path.startsWith('/api/change/')?path.slice('/api/change/'.length):'';
   if(!['data','invalid'].includes(kind)&&!changeable.has(kind as any))return reply({detail:'Unknown workshop action.'},404);
   if(u.search||request.headers.get('X-Workshop-Action')!=='publish-synthetic-data'||!request.headers.get('Content-Type')?.startsWith('application/json'))return reply({detail:'Use the workshop controls.'},400);
   const text=await request.text();if(text.length>64||text.trim()!=='{}')return reply({detail:'Only fixed demonstration actions are accepted.'},400);
   const id=request.headers.get('X-Workshop-Request')||'';if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id))return reply({detail:'A request identifier is required.'},400);
   if(!enabled())return reply({detail:'The owner must connect the restricted demo credential and confirm a zero-dollar Actions spending limit.'},503);
+  if(branchMatch&&!(await branches()).options[kind]?.[branchMatch[2]])return reply({detail:'Only registered workshop branches can run.'},400);
   // Check GitHub directly before any data or settings mutation.
   const s:any=await current();if(!s.ready||s.status!=='completed')return reply({detail:'Wait for the current workflow to finish before updating.'},409);
   const control=await rpc('workshop_state');if(pendingUpdate(control,s))return reply({detail:'An earlier update is waiting for GitHub. Inspect its request before submitting another.'},409);
@@ -70,7 +73,7 @@ export async function handle(request:Request){
      const released=await rpc('cpue_append_year',{p_year:year,p_sets:batch.sets,p_catch:batch.catch});
      result={...released,quality_check:released.quality_check,published:true,year,database_version:released.version};
     }
-   }else{await rpc('workshop_demo_start',{p_request:id});result=await change(kind);}
+   }else{await rpc('workshop_demo_start',{p_request:id});result=branchMatch?await changeBranch(kind,branchMatch[2],id):await change(kind);}
    result.previous_run=s.run_id;
    await rpc('workshop_finish',{p_id:id,p_result:result});await invalidate();return reply(result,202);
   }catch(e){

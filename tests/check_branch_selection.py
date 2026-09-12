@@ -53,6 +53,21 @@ with tempfile.TemporaryDirectory(prefix='cpue-selected-branch-') as directory:
     call('scripts/workflow_plan.py', 'previous-development')
     repeated = json.loads((root/'stages/_plan.json').read_text())
     assert {k for k, v in repeated['stages'].items() if v['action'] == 'run'} == expected
+    # Independently select a CPUE branch and an assessment branch on the other path.
+    shutil.rmtree(root/'stages')
+    multi={'cpue_vessel': {'branch':'model-a-dev','request':'cccccccc-cccc-4ccc-8ccc-cccccccccccc'},
+           'assessment_year_ref': {'branch':'structure-1-dev','request':'cccccccc-cccc-4ccc-8ccc-cccccccccccc'}}
+    (root/'config/modules.json').write_text(json.dumps(multi))
+    call('scripts/resolve_modules.py')
+    call('scripts/workflow_plan.py','previous')
+    combined=json.loads((root/'stages/_plan.json').read_text())
+    assert {k for k,v in combined['stages'].items() if v['action']=='run'}==expected|{'assessment_year_ref'}
+    assert combined['module_sources']['prepare_year']['branch']=='main'
+    assert combined['module_sources']['assessment_year_ref']['branch']=='structure-1-dev'
+    for key,stage in combined['stages'].items():
+        if stage['action']=='run':call('scripts/run_stage.py',key)
+    report=json.loads((root/'stages/report/outputs/manifest.json').read_text())
+    assert report['module_selection']==multi
     # Caller-controlled commit/repository fields cannot replace registered sources.
     for invalid in [{'cpue_vessel': {'branch': 'arbitrary', 'request': selection['cpue_vessel']['request']}},
                     {'cpue_vessel': {**selection['cpue_vessel'], 'commit': 'a'*40}},

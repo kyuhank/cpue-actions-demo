@@ -1,4 +1,4 @@
-import {changeBranch,branches,change,changeable,current,consoleLines,output,outputStage,outputNames,stageOutputs,ensureBranch} from './github.ts';
+import {parseSelection,branchUpdates,runBranches,changeBranch,branches,change,changeable,current,consoleLines,output,outputStage,outputNames,stageOutputs,ensureBranch} from './github.ts';
 import {rpc,cached,invalidate} from './database.ts';
 import {maintain,observe,pendingUpdate} from './lifecycle.ts';
 import batches from './batches.json' with {type:'json'};
@@ -47,14 +47,16 @@ export async function handle(request:Request){
    return reply({detail:'Unknown workshop route.'},404);
   }
   if(request.method!=='POST')return reply({detail:'Method not allowed.'},405);
-  const branchMatch=path.match(/^\/api\/branch\/([a-z_]+)\/([a-z0-9-]{1,60})$/);
-  const kind=branchMatch?branchMatch[1]:path==='/api/update'?'data':path==='/api/check-invalid-data'?'invalid':path.startsWith('/api/change/')?path.slice('/api/change/'.length):'';
-  if(!['data','invalid'].includes(kind)&&!changeable.has(kind as any))return reply({detail:'Unknown workshop action.'},404);
+  const combined=path==='/api/run',branchMatch=path.match(/^\/api\/branch\/([a-z_]+)\/([a-z0-9-]{1,60})$/);
+  let kind=branchMatch?branchMatch[1]:path==='/api/update'?'data':path==='/api/check-invalid-data'?'invalid':path.startsWith('/api/change/')?path.slice('/api/change/'.length):'';
+  if(!combined&&!['data','invalid'].includes(kind)&&!changeable.has(kind as any))return reply({detail:'Unknown workshop action.'},404);
   if(u.search||request.headers.get('X-Workshop-Action')!=='publish-synthetic-data'||!request.headers.get('Content-Type')?.startsWith('application/json'))return reply({detail:'Use the workshop controls.'},400);
-  const text=await request.text();if(text.length>64||text.trim()!=='{}')return reply({detail:'Only fixed demonstration actions are accepted.'},400);
+  const text=await request.text();let selection:{start:string,branches:Record<string,string>}|null=null;
+  if(combined){try{selection=parseSelection(text);kind=selection.start;}catch{return reply({detail:'Choose a stage and registered branches only.'},400);}}
+  else if(text.length>64||text.trim()!=='{}')return reply({detail:'Only fixed demonstration actions are accepted.'},400);
   const id=request.headers.get('X-Workshop-Request')||'';if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id))return reply({detail:'A request identifier is required.'},400);
   if(!enabled())return reply({detail:'The owner must connect the restricted demo credential and confirm a zero-dollar Actions spending limit.'},503);
-  if(branchMatch&&!(await branches()).options[kind]?.[branchMatch[2]])return reply({detail:'Only registered workshop branches can run.'},400);
+  if(branchMatch||selection){try{branchUpdates(kind,selection?.branches||{[kind]:branchMatch![2]},await branches());}catch{return reply({detail:'Only registered workshop branches can run.'},400);}}
   // Check GitHub directly before any data or settings mutation.
   const s:any=await current();if(!s.ready||s.status!=='completed')return reply({detail:'Wait for the current workflow to finish before updating.'},409);
   const control=await rpc('workshop_state');if(pendingUpdate(control,s))return reply({detail:'An earlier update is waiting for GitHub. Inspect its request before submitting another.'},409);
@@ -63,17 +65,26 @@ export async function handle(request:Request){
   let result:any;
   try{
    if(kind==='data'||kind==='invalid'){
-    const snapshot=await rpc('cpue_snapshot',{p_version:null}),year=snapshot.version+1;
-    const batch=structuredClone((batches as any)[year]);if(!batch)throw Error('All synthetic years have been published. You can still change CPUE or assessment configurations.');
-    if(kind==='invalid')batch.sets[0][3]=0;
-    const quality=await rpc('cpue_check_year',{p_year:year,p_sets:batch.sets,p_catch:batch.catch});
-    if(!quality.accepted)result={quality_check:quality,published:false};
-    else{
-     await rpc('workshop_demo_start',{p_request:id});await ensureBranch();
-     const released=await rpc('cpue_append_year',{p_year:year,p_sets:batch.sets,p_catch:batch.catch});
-     result={...released,quality_check:released.quality_check,published:true,year,database_version:released.version};
+    const snapshot=await rpc('cpue_snapshot',{p_version:null}),year=2024;
+    if(kind==='data'&&snapshot.version>=year){
+     // One added batch only. A replay recalculates the already accepted release.
+     if(snapshot.version!==year)throw Error('Reset the demonstration before replaying its fixed data update.');
+     await rpc('workshop_demo_start',{p_request:id});
+     const replay=await runBranches('extract',selection?.branches||{},id);
+     result={...replay,replayed:true,published:true,year,database_version:year};
+    }else{
+     const batch=structuredClone((batches as any)[year]);
+     if(kind==='invalid')batch.sets[0][3]=0;
+     const quality=await rpc('cpue_check_year',{p_year:year,p_sets:batch.sets,p_catch:batch.catch});
+     if(!quality.accepted)result={quality_check:quality,published:false};
+     else{
+      await rpc('workshop_demo_start',{p_request:id});await ensureBranch();
+      if(selection)await runBranches('data',selection.branches,id,false);
+      const released=await rpc('cpue_append_year',{p_year:year,p_sets:batch.sets,p_catch:batch.catch});
+      result={...released,quality_check:released.quality_check,published:true,year,database_version:released.version};
+     }
     }
-   }else{await rpc('workshop_demo_start',{p_request:id});result=branchMatch?await changeBranch(kind,branchMatch[2],id):await change(kind);}
+   }else{await rpc('workshop_demo_start',{p_request:id});result=selection?await runBranches(kind,selection.branches,id):branchMatch?await changeBranch(kind,branchMatch[2],id):await change(kind);}
    result.previous_run=s.run_id;
    await rpc('workshop_finish',{p_id:id,p_result:result});await invalidate();return reply(result,202);
   }catch(e){

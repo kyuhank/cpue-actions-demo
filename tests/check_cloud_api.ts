@@ -11,6 +11,8 @@ Deno.test('Unconfigured cloud cannot publish; paths, fields and request identiti
  equal((await handle(req('/api/update?repo=private'))).status,400);
  equal((await handle(req('/api/update','{}',{'X-Workshop-Request':'replay'}))).status,400);
  equal((await handle(req())).status,503);
+ equal((await handle(req('/api/run',JSON.stringify({start:'cpue_vessel',branches:{cpue_vessel:'model-a-dev'}})))).status,503);
+ for(const body of ['{}','null','{"start":"report","branches":{},"command":"x"}'])equal((await handle(req('/api/run',body))).status,400);
  for(const [stage] of definitions)equal((await handle(req('/api/change/'+stage))).status,503);
  Deno.env.set('WORKSHOP_GITHUB_TOKEN','fake-dedicated-token');
  equal((await handle(req())).status,503); // A token alone cannot bypass the no-charge prerequisite.

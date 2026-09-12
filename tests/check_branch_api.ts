@@ -1,4 +1,4 @@
-import {changeBranch,selectedModules,definitions} from '../supabase/functions/workshop-api/github.ts';
+import {parseSelection,branchUpdates,runBranches,changeBranch,selectedModules,definitions} from '../supabase/functions/workshop-api/github.ts';
 const assert=(value:unknown)=>{if(!value)throw Error('Assertion failed');};
 Deno.test('Branch controls preserve stage identities and reject arbitrary sources',()=>{
  const lock=JSON.parse(Deno.readTextFileSync('modules.lock.json'));
@@ -10,7 +10,7 @@ Deno.test('Branch controls preserve stage identities and reject arbitrary source
  const altered=structuredClone(catalog);altered.cpue_vessel.private={repository:'kyuhank/private-example',branch:'private',commit:'a'.repeat(40)};
  rejected=false;try{selectedModules(lock,altered,{cpue_vessel:{branch:'private'}});}catch{rejected=true;}assert(rejected);
 });
-Deno.test('A branch run atomically commits two fixed configuration paths and dispatches only the demo',async()=>{
+Deno.test('A mixed branch run atomically commits two fixed configuration paths and dispatches only the demo',async()=>{
  const original=globalThis.fetch,calls:{path:string,method:string,body:any}[]=[];
  const lock=JSON.parse(Deno.readTextFileSync('modules.lock.json')),catalog=JSON.parse(Deno.readTextFileSync('module-branches.json'));
  const head='c'.repeat(40),core='d'.repeat(40),newCommit='e'.repeat(40);
@@ -36,13 +36,29 @@ Deno.test('A branch run atomically commits two fixed configuration paths and dis
   throw Error('Unexpected request: '+path);
  };
  try{
-  const result=await changeBranch('cpue_vessel','model-a-dev','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
-  assert(result.commit===newCommit&&result.code_source.commit===catalog.cpue_vessel['model-a-dev'].commit);
+  const result=await runBranches('cpue_vessel',{cpue_vessel:'model-a-dev',assessment_year_ref:'structure-1-dev'},'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+  assert(result.commit===newCommit&&result.branches.cpue_vessel.commit===catalog.cpue_vessel['model-a-dev'].commit);
   const tree=calls.find(c=>c.method==='POST'&&c.path.endsWith('/git/trees'))!.body.tree;
   assert(tree.length===2&&tree[0].path==='config/modules.json'&&tree[1].path==='config/stages.json');
   assert(JSON.parse(tree[0].content).cpue_vessel.branch==='model-a-dev');
+  assert(JSON.parse(tree[0].content).assessment_year_ref.branch==='structure-1-dev');
   assert(!JSON.parse(tree[1].content).cpue_vessel&&JSON.parse(tree[1].content).cpue_year.min_hooks===2000);
   assert(calls.find(c=>c.method==='PATCH')!.body.force===false);
   assert(calls.at(-1)?.body.ref==='demo-runtime');
  }finally{globalThis.fetch=original;}
+});
+
+Deno.test('Every stage can choose independently; a combined request keeps other stage selections',()=>{
+ const lock=JSON.parse(Deno.readTextFileSync('modules.lock.json')),catalog=JSON.parse(Deno.readTextFileSync('module-branches.json'));
+ const available=selectedModules(lock,catalog,{}),chosen:Record<string,string>={};
+ for(const [key] of definitions){chosen[key]=Object.keys(catalog[key]).at(-1)!;}
+ const parsed=parseSelection(JSON.stringify({start:'cpue_vessel',branches:chosen}));
+ const updates=branchUpdates(parsed.start,parsed.branches,available);
+ assert(Object.keys(updates).length===11);
+ for(const [key,branch] of Object.entries(chosen))assert(updates[key].commit===catalog[key][branch].commit);
+ const mixed=branchUpdates('cpue_vessel',{cpue_vessel:'model-a-dev',assessment_year_ref:'structure-1-dev'},available);
+ assert(Object.keys(mixed).length===2&&mixed.cpue_vessel.branch!==mixed.assessment_year_ref.branch);
+ for(const value of [{start:'private',branches:{}},{start:'data',branches:{private:'main'}},{start:'extract',branches:{extract:{commit:'a'.repeat(40)}}},{start:'extract',branches:{extract:'main'},repo:'private'},null]){
+  let rejected=false;try{parseSelection(JSON.stringify(value));}catch{rejected=true;}assert(rejected);
+ }
 });

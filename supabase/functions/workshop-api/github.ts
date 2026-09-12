@@ -161,30 +161,55 @@ export async function change(stage:string){
  return {stage,setting,description,commit:committed.commit.sha,url:committed.commit.html_url};
 }
 
-export async function changeBranch(stage:string,branch:string,request:string){
- if(!changeable.has(stage as any)||!/^[a-z0-9-]{1,60}$/.test(branch))throw Error('Unknown module branch.');
- const available=await branches();
- if(!available.options[stage]?.[branch])throw Error('Only registered workshop branches can run.');
+export function parseSelection(text:string){
+ if(text.length>2048)throw Error('Workshop selection is too large.');
+ const value=JSON.parse(text);
+ if(!value||Array.isArray(value)||Object.keys(value).sort().join(',')!=='branches,start'
+    ||(value.start!=='data'&&!changeable.has(value.start))||!value.branches||typeof value.branches!=='object'||Array.isArray(value.branches)
+    ||Object.keys(value.branches).length>definitions.length)throw Error('Choose a stage and registered branches.');
+ for(const [key,branch] of Object.entries(value.branches))if(!changeable.has(key as any)||typeof branch!=='string'||!/^[a-z0-9-]{1,60}$/.test(branch))throw Error('Unknown module branch.');
+ return value as {start:string,branches:Record<string,string>};
+}
+export function branchUpdates(start:string,choices:Record<string,string>,available:{sources:Record<string,ModuleSource>,options:Record<string,Record<string,ModuleSource>>}){
+ if(start!=='data'&&!changeable.has(start as any))throw Error('Unknown workshop stage.');
+ const result:Record<string,ModuleSource>={};
+ for(const [key,branch] of Object.entries(choices)){
+  const source=available.options[key]?.[branch];if(!source)throw Error('Only registered workshop branches can run.');
+  if(available.sources[key]?.branch!==branch)result[key]=source;
+ }
+ if(start!=='data'){
+  const branch=choices[start]||available.sources[start]?.branch,source=available.options[start]?.[branch];
+  if(!source)throw Error('Only registered workshop branches can run.');result[start]=source;
+ }
+ return result;
+}
+export async function runBranches(start:string,choices:Record<string,string>,request:string,submit=true){
+ branchUpdates(start,choices,await branches());
  await ensureBranch();
  const head=(await json('git/ref/heads/'+DEMO_BRANCH)).object.sha;
- // Recheck the exact caller: the selected source must come from its trusted catalog.
- const source=(await moduleConfiguration(head)).options[stage]?.[branch];
- if(!source)throw Error('The branch catalog changed; refresh before running.');
+ // Resolve the complete selection against the exact caller's trusted catalog.
+ const updates=branchUpdates(start,choices,await moduleConfiguration(head));
+ if(!Object.keys(updates).length)return {stage:start,branches:{},commit:head,url:`https://github.com/${REPO}/commit/${head}`};
  const parent=await json('git/commits/'+head);
  async function config(name:string){
   const r=await github(`contents/config/${name}.json?ref=${head}`,'GET',undefined,true);
   return r.ok?JSON.parse(atob((await r.json()).content.replace(/\s/g,''))):{};
  }
  const [modules,settings]=await Promise.all([config('modules'),config('stages')]);
- modules[stage]={branch,request};delete settings[stage];
- // Both configuration files enter one commit; no intermediate settings are executable.
+ for(const [key,source] of Object.entries(updates)){modules[key]={branch:source.branch,request};delete settings[key];}
+ // The entire combination enters one commit; no partial branch selection can run.
  const tree=await (await github('git/trees','POST',{base_tree:parent.tree.sha,tree:[
   {path:'config/modules.json',mode:'100644',type:'blob',content:JSON.stringify(modules,null,2)+'\n'},
   {path:'config/stages.json',mode:'100644',type:'blob',content:JSON.stringify(settings,null,2)+'\n'},
  ]})).json();
  const identity={name:'kyuhank',email:'kh2064@gmail.com'};
- const committed=await (await github('git/commits','POST',{message:`Run ${stage} from ${branch} @ ${source.commit.slice(0,8)}`,tree:tree.sha,parents:[head],author:identity,committer:identity})).json();
+ const description=Object.entries(updates).map(([key,source])=>`${key}: ${source.branch} @ ${source.commit.slice(0,8)}`).join('; ');
+ const committed=await (await github('git/commits','POST',{message:'Run module selection: '+description,tree:tree.sha,parents:[head],author:identity,committer:identity})).json();
  await github('git/refs/heads/'+DEMO_BRANCH,'PATCH',{sha:committed.sha,force:false});
- await dispatch();
- return {stage,branch,code_source:source,commit:committed.sha,url:`https://github.com/${REPO}/commit/${committed.sha}`};
+ if(submit)await dispatch();
+ return {stage:start,branches:updates,commit:committed.sha,url:`https://github.com/${REPO}/commit/${committed.sha}`};
+}
+export async function changeBranch(stage:string,branch:string,request:string){
+ const result=await runBranches(stage,{[stage]:branch},request);
+ return {...result,branch,code_source:result.branches[stage]};
 }

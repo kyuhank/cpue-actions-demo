@@ -12,3 +12,17 @@ Deno.test('An anonymous caller or unsigned JWT cannot publish a batch',async()=>
   let failed=false;try{await acceptIntake(new Request('https://example.test',{method:'POST',headers:{Authorization:auth},body:'{}'}));}catch{failed=true;}assert(failed);
  }
 });
+
+import {mapRun} from '../supabase/functions/workshop-api/github.ts';
+Deno.test('QC return and recheck reflect actual GitHub steps in one workflow',()=>{
+ const run={id:123,run_attempt:1,status:'in_progress',display_title:'Demo'};
+ const steps=[{name:'QC submitted records',status:'completed',conclusion:'failure'},
+ {name:'Correct and resubmit example',status:'in_progress'},
+ {name:'Recheck corrected submission',status:'queued'}];
+ const jobs=[{name:'[qc] Data quality check',status:'in_progress',steps}];
+ const phase=()=>mapRun(run,jobs).intake_stages.find(s=>s.key==='qc')!.correction_phase;
+ assert(phase()==='resubmitting');
+ Object.assign(steps[1],{status:'completed',conclusion:'success'});steps[2].status='in_progress';
+ assert(phase()==='rechecking');
+ Object.assign(steps[2],{status:'completed',conclusion:'success'});assert(phase()==='corrected');
+});

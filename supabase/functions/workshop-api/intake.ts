@@ -22,7 +22,7 @@ export async function acceptIntake(request:Request){
  const text=await request.text();if(text.length>256)throw Error('Invalid intake request.');const body=JSON.parse(text);
  if(Object.keys(body).sort().join(',')!=='batch_sha256,request')throw Error('Invalid intake fields.');
  const limits=await rpc('workshop_state'),record=limits.last_request;
- if(record?.result?.request!==body.request||record.result.intake_mode!=='valid'||record.result.commit!==claims.sha||Date.parse(record.created_at)<Date.now()-10*60000)throw Error('This intake request is no longer active.');
+ if(record?.result?.request!==body.request||!['valid','invalid'].includes(record.result.intake_mode)||record.result.commit!==claims.sha||Date.parse(record.created_at)<Date.now()-10*60000)throw Error('This intake request is no longer active.');
  const run=await json('actions/runs/'+claims.run_id);
  if(run.path!=='.github/workflows/update.yml'||run.head_sha!==claims.sha||String(run.run_attempt)!==claims.run_attempt||run.status==='completed')throw Error('This intake run is no longer active.');
  const workflow=await json('contents/.github/workflows/update.yml?ref='+claims.sha);
@@ -30,6 +30,10 @@ export async function acceptIntake(request:Request){
  if(!pin||claims.job_workflow_ref!==`kyuhank/cpue-actions-demo/.github/workflows/toy-pipeline.yml@${pin}`||claims.job_workflow_sha!==pin)throw Error('Unregistered intake workflow.');
  const jobs=(await json(`actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`)).jobs;
  if(!['submission','qc'].every(k=>jobs.some((j:any)=>j.name.includes('['+k+']')&&j.conclusion==='success'))||!jobs.some((j:any)=>j.name.includes('[ingest]')&&j.status==='in_progress'))throw Error('Submission and QC must pass before loading.');
+ if(record.result.intake_mode==='invalid'){
+  const qc=jobs.find((j:any)=>j.name.includes('[qc]'));
+  if(!['Correct and resubmit example','Recheck corrected submission'].every(name=>qc?.steps?.some((step:any)=>step.name===name&&step.conclusion==='success')))throw Error('The corrected example must be resubmitted and checked.');
+ }
  const batch=(batches as any)['2024'];
  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(batch))))).map(x=>x.toString(16).padStart(2,'0')).join('');
  if(body.batch_sha256!==hash)throw Error('The prepared batch does not match the fixed demonstration data.');

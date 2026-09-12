@@ -3,7 +3,7 @@ import json, os
 from pathlib import Path
 import tarfile
 ROOT=Path(__file__).resolve().parents[1];os.chdir(ROOT)
-keys=('TOY_CONTAINER_IMAGE','TOY_CODE_COMMIT','TOY_DATA_COMMIT','TOY_DATA_REPOSITORY','TOY_SOURCE_DATABASE','TOY_STAGE_CONFIG','TOY_SOURCE_PROVIDER','TOY_SOURCE_VERSION')
+keys=('TOY_DEMO_PACE_SECONDS','TOY_CONTAINER_IMAGE','TOY_CODE_COMMIT','TOY_DATA_COMMIT','TOY_DATA_REPOSITORY','TOY_SOURCE_DATABASE','TOY_STAGE_CONFIG','TOY_SOURCE_PROVIDER','TOY_SOURCE_VERSION')
 context={k:os.environ[k] for k in keys if os.environ.get(k)}
 context['TOY_EXECUTION_MODE']='module_jobs'
 (ROOT/'execution-context.json').write_text(json.dumps(context,indent=2)+'\n')

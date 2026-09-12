@@ -110,7 +110,25 @@ jobs:
         run: python3 -c 'import tarfile,os; tarfile.open("stage-"+os.environ["GITHUB_RUN_ATTEMPT"]+"-submission.tar.gz").extractall(filter="data")'
       - name: Pull container image
         run: docker pull "$TOY_CONTAINER_IMAGE"
-      - name: Run module
+      - name: QC submitted records
+        id: initial_qc
+        continue-on-error: ${{ inputs.intake_mode == 'invalid' }}
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
+            --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env TOY_CODE_COMMIT --env TOY_CONTAINER_IMAGE \
+            --env WORKSHOP_INTAKE_MODE --env WORKSHOP_REQUEST_ID --env SUPABASE_URL \
+            --network none \
+            "$TOY_CONTAINER_IMAGE" python scripts/data_intake.py qc
+      - name: Correct and resubmit example
+        if: ${{ steps.initial_qc.outcome == 'failure' && inputs.intake_mode == 'invalid' }}
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
+            --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env TOY_CODE_COMMIT --env TOY_CONTAINER_IMAGE \
+            --env WORKSHOP_INTAKE_MODE --env WORKSHOP_REQUEST_ID --env SUPABASE_URL \
+            --network none \
+            "$TOY_CONTAINER_IMAGE" python scripts/data_intake.py resubmit
+      - name: Recheck corrected submission
+        if: ${{ steps.initial_qc.outcome == 'failure' && inputs.intake_mode == 'invalid' }}
         run: |
           docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
             --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env TOY_CODE_COMMIT --env TOY_CONTAINER_IMAGE \
@@ -205,7 +223,7 @@ jobs:
       TOY_EXECUTION_MODE: module_jobs
       TOY_GITHUB_JOB: workshop
       TOY_STAGE_CONFIG: ${{ inputs.data_repository && 'source-data/config/stages.json' || 'config/stages.json' }}
-      TOY_DEMO_PACE_SECONDS: 4
+      TOY_DEMO_PACE_SECONDS: 1
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       TOY_DATABASE_VERSION: ${{ inputs.data_version }}
     steps:

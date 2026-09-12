@@ -20,7 +20,7 @@ export const intakeKeys=new Set(['submission','qc','ingest']);
 export const outputKeys=new Set([...changeable,...intakeKeys]);
 export function outputNames(key:string):string[]{
  const common=['results.html','manifest.json','record.json'];
- if(intakeKeys.has(key))return ['submission.json','receipt.json','quality.json','release.json','prepared.json',...common];
+ if(intakeKeys.has(key))return ['submission.json','receipt.json','quality.json','first-quality.json','accepted-submission.json','correction.json','release.json','prepared.json',...common];
  if(['cpue_summary','cpue_report'].includes(key))return ['cpue.csv','comparison.csv','cpue.svg','report.html',...common];
  if(key==='extract')return ['sets.csv','catch.csv','extract.sql','extract-catch.sql',...common];
  if(key.startsWith('cpue_'))return ['cpue.csv','cpue-diagnostics.txt','cpue-diagnostics.json',...common];
@@ -52,14 +52,18 @@ export function mapRun(run:any,jobs:any[]){
   states[key]=state;
   return {key,label:label.slice(3),parents,status:state,reused,source_id:`${run.id}-${run.run_attempt}-${key}`,started_at:distributed?job?.started_at:step?.started_at,completed_at:distributed?job?.completed_at:step?.completed_at,html_url:job?.html_url,_job_id:job?.id,_step_number:step?.number};
  });
- const intake_stages=[['submission',[]],['qc',['submission']],['ingest',['qc']]].map(([key,parents])=>{const job=jobs.find(j=>j.name?.includes('['+key+']'));return {key,parents,status:job?.status==='in_progress'?'running':job?.conclusion==='success'?'completed':job?.conclusion==='failure'?'failed':job?.conclusion==='skipped'?(jobs.some(j=>j.name?.includes('[submission]')&&j.conclusion==='skipped')?'not_requested':'blocked'):'waiting',skipped:job?.conclusion==='skipped',source_id:`${run.id}-${run.run_attempt}-${key}`,_job_id:job?.id,html_url:job?.html_url};});
+ const qcSteps=jobs.find(j=>j.name?.includes('[qc]'))?.steps||[];
+ const correction=qcSteps.find((s:any)=>s.name==='Correct and resubmit example'),recheck=qcSteps.find((s:any)=>s.name==='Recheck corrected submission');
+ const correcting=correction&&correction.status==='in_progress';
+ const rechecking=correction?.conclusion==='success'&&recheck?.conclusion!=='success';
+ const intake_stages=[['submission',[]],['qc',['submission']],['ingest',['qc']]].map(([key,parents])=>{const job=jobs.find(j=>j.name?.includes('['+key+']'));return {key,parents,correction_phase:key==='qc'?(correcting?'resubmitting':rechecking?'rechecking':recheck?.conclusion==='success'?'corrected':null):null,status:job?.status==='in_progress'?'running':job?.conclusion==='success'?'completed':job?.conclusion==='failure'?'failed':job?.conclusion==='skipped'?(jobs.some(j=>j.name?.includes('[submission]')&&j.conclusion==='skipped')?'not_requested':'blocked'):'waiting',skipped:job?.conclusion==='skipped',source_id:`${run.id}-${run.run_attempt}-${key}`,_job_id:job?.id,html_url:job?.html_url};});
  return {ready:true,has_run:true,stages,intake_stages,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
  trigger_message:run.display_title.startsWith('Database version ')?run.display_title:(run.head_commit?.message||run.display_title).split('\n')[0].slice(0,160),database_version:/^Database version 20\d{2}$/.test(run.display_title)?Number(run.display_title.slice(-4)):null,
  execution:{mode:distributed?'module_jobs':'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};
 }
 export function emptyRun(){return {ready:true,has_run:false,baseline_available:true,stages:definitions.map(([key,label,parents])=>({key,label:label.slice(3),parents,status:'waiting',reused:false,source_id:'',_step_number:null})),run_id:null,number:null,attempt:null,run_url:'',commit:'',status:'completed',conclusion:'success',database_version:2023,execution:{mode:'steps',job_count:0,jobs:[]},source:{stale:false,last_success:new Date().toISOString()},created_at:null,completed_at:null};}
 type ModuleSource={repository:string,branch:string,commit:string};
-const moduleCache = new Map<string,{sources:Record<string,ModuleSource>,options:Record<string,Record<string,ModuleSource>>,dataVersion?:number}>();
+const moduleCache = new Map<string,{sources:Record<string,ModuleSource>,options:Record<string,Record<string,ModuleSource>>,dataVersion?:number,intakeSource?:ModuleSource}>();
 export function validSource(key:string,source:any):source is ModuleSource{
  const part=key.split('_')[0],repo=({prepare:'inputs'} as Record<string,string>)[part]||part;
  return changeable.has(key as any)&&source?.repository==='kyuhank/cpue-demo-'+repo&&/^[a-f0-9]{40}$/.test(source.commit)&&/^[a-z0-9-]{1,60}$/.test(source.branch);
@@ -92,10 +96,10 @@ async function moduleConfiguration(triggerCommit:string){
  const [locked,catalog,config,dataConfig]=await Promise.all([read('modules.lock.json'),read('module-branches.json',true),github(`contents/config/modules.json?ref=${triggerCommit}`,'GET',undefined,true),github(`contents/config/data.json?ref=${triggerCommit}`,'GET',undefined,true)]);
  const selections=config.ok?JSON.parse(atob((await config.json()).content.replace(/\s/g,''))):{};
  const rawData=dataConfig.ok?JSON.parse(atob((await dataConfig.json()).content.replace(/\s/g,''))):{};
- const result={...selectedModules(locked,catalog,selections),dataVersion:[2021,2022,2023,2024].includes(rawData.version)?rawData.version:undefined};
+ const result={...selectedModules(locked,catalog,selections),intakeSource:{repository:'kyuhank/cpue-actions-demo',branch:'main',commit},dataVersion:[2021,2022,2023,2024].includes(rawData.version)?rawData.version:undefined};
  if(moduleCache.size>=16)moduleCache.clear();moduleCache.set(triggerCommit,result);return result;
 }
-async function runModules(run:any){try{return await moduleConfiguration(run.head_sha);}catch{return {sources:{} as Record<string,ModuleSource>,dataVersion:undefined};}}
+async function runModules(run:any){try{return await moduleConfiguration(run.head_sha);}catch{return {sources:{} as Record<string,ModuleSource>,dataVersion:undefined,intakeSource:undefined};}}
 export async function branches(){
  const branch=await github('git/ref/heads/'+DEMO_BRANCH,'GET',undefined,true);
  const head=branch.ok?await branch.json():await json('git/ref/heads/main');
@@ -103,7 +107,7 @@ export async function branches(){
 }
 export async function current(){const runs=(await json('actions/workflows/update.yml/runs?per_page=1')).workflow_runs;
  if(!runs.length)return emptyRun();const r=runs[0];const [jobs,sources]=await Promise.all([json(`actions/runs/${r.id}/attempts/${r.run_attempt}/jobs?per_page=100`),runModules(r)]);
- const result=mapRun(r,jobs.jobs);return {...result,database_version:result.database_version||sources.dataVersion||null,stages:result.stages.map(s=>({...s,code_source:sources.sources[s.key]}))};
+ const result=mapRun(r,jobs.jobs);return {...result,database_version:result.database_version||sources.dataVersion||null,stages:result.stages.map(s=>({...s,code_source:sources.sources[s.key]})),intake_stages:result.intake_stages.map(s=>({...s,code_source:sources.intakeSource}))};
 }
 export async function ensureBranch(){
  const existing=await github('git/ref/heads/'+DEMO_BRANCH,'GET',undefined,true);

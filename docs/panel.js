@@ -26,7 +26,7 @@ function plannedRoots(){
  const ancestors=key=>{const found=new Set(),todo=[...(stages.get(key)?.parents||[])];while(todo.length){const parent=todo.pop();if(found.has(parent))continue;found.add(parent);todo.push(...(stages.get(parent)?.parents||[]));}return found;};
  return roots.filter(key=>!roots.some(other=>other!==key&&ancestors(key).has(other)));
 }
-function nextSource(key){return branchCatalog?.options[key]?.[branchDrafts[key]||branchCatalog?.sources[key]?.branch]||data?.stages.find(s=>s.key===key)?.code_source;}
+function nextSource(key){if(['submission','qc','ingest'].includes(key))return data?.intake_stages?.find(s=>s.key===key)?.code_source||branchCatalog?.intakeSource;return branchCatalog?.options[key]?.[branchDrafts[key]||branchCatalog?.sources[key]?.branch]||data?.stages.find(s=>s.key===key)?.code_source;}
 function sourceLink(key){
  const link=node(key).querySelector('.source-link'),source=nextSource(key);
  link.hidden=key!=='data'&&!source;
@@ -126,7 +126,7 @@ function roundedRoute(points,radius=6){
  return d+`L${clean.at(-1).join(',')}`;
 }
 function qualityStatus(){
- const actual=data?.intake_stages?.find(j=>j.key==='qc');if(actual&&!actual.skipped)return actual.status;
+ const actual=data?.intake_stages?.find(j=>j.key==='qc');if(actual&&!actual.skipped)return actual.correction_phase==='resubmitting'?'failed':actual.status;
  const q=data?.data_intake?.quality_check;
  return sending&&changeKind==='data'?'running':q?(q.accepted?'completed':'failed'):'waiting';
 }
@@ -136,21 +136,27 @@ function drawQuality(){
   gate.onclick=()=>{qualityRecordOpen=true;hidePreview();$('console').hidden=false;$('logs').textContent='Hide record';$('logs').setAttribute('aria-expanded','true');showQualityRecord();};
   gate.onmouseenter=()=>showPreview('qc');gate.onmouseleave=hidePreview;gate.onfocus=()=>showPreview('qc');gate.onblur=hidePreview;$('chain').append(gate);
  }
- let submission=$('submission-node');if(!submission){submission=document.createElement('button');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.innerHTML='<strong>Data submission</strong><span class="submission-owner">Owner · Korea</span><small hidden>! Correction needed</small>';submission.onclick=()=>{selected='data';dataDraft='new';draw();};$('chain').append(submission);}
+ let submission=$('submission-node');if(!submission){submission=document.createElement('div');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.innerHTML='<button class="node-control"><strong>Data submission</strong></button>';submission.onclick=()=>{selected='data';dataDraft='new';draw();};$('chain').append(submission);}
  submission.classList.toggle('selected',selected==='data'&&(!dataDraft||dataDraft==='new'));
  node('data').classList.toggle('selected',selected==='data'&&dataDraft!=='new');
  let ingest=$('ingest-node');if(!ingest){ingest=document.createElement('button');ingest.id='ingest-node';ingest.dataset.key='ingest';ingest.textContent='Prepare & load';ingest.title='Owner · Jessica, Tiffany. Align fields, formats and units; load accepted records into the database.';$('chain').append(ingest);}
- for(const [key,el] of [['submission',submission],['qc',gate],['ingest',ingest]]){el.onmouseenter=()=>showPreview(key);el.onmouseleave=hidePreview;}
+ for(const [key,el] of [['submission',submission],['qc',gate]]){
+  el.onmouseenter=()=>showPreview(key);el.onmouseleave=hidePreview;
+  let link=el.querySelector('.source-link');if(!link){link=document.createElement('a');link.className='source-link';link.textContent='↗';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};link.onmouseenter=hidePreview;el.append(link);}sourceLink(key);
+ }
+
  const actualIngest=data.intake_stages?.find(j=>j.key==='ingest');
  const actualSubmission=data.intake_stages?.find(j=>j.key==='submission');
- submission.dataset.status=actualSubmission?.status||'waiting';submission.querySelector('.submission-owner').textContent=(actualSubmission&&!actualSubmission.skipped?(icons[actualSubmission.status]||'·')+' ':'')+'Owner · Korea';submission.classList.toggle('running',actualSubmission?.status==='running');
+ submission.dataset.status=actualSubmission?.status||'waiting';submission.classList.toggle('running',actualSubmission?.status==='running');
  ingest.onclick=()=>{selected='data';dataDraft='new';draw();showPreview('ingest');};
- ingest.textContent=(actualIngest&&!actualIngest.skipped?(icons[actualIngest.status]||'·')+' ':'')+'Prepare & load';
- const state=qualityStatus();ingest.className='ingest-node '+(actualIngest?.status||(state==='failed'?'blocked':state==='completed'&&data.data_intake?.published?'completed':'waiting'));submission.classList.toggle('needs-correction',state==='failed');submission.querySelector('small').hidden=state!=='failed';
- const stamp=data?.data_intake?.checked_at;if(state==='failed'&&stamp&&stamp!==qualityAlertStamp){qualityAlertStamp=stamp;notice('QC returned the submission: '+(data.data_intake.quality_check.errors?.[0]?.message||'Correct the flagged records.')+' Select Data submission to resubmit.');}
+ let label=ingest.querySelector('.ingest-label');if(!label){label=document.createElement('span');label.className='ingest-label';ingest.replaceChildren(label);}label.textContent=(actualIngest&&!actualIngest.skipped?(icons[actualIngest.status]||'·')+' ':'')+'Prepare & load';
+ const state=qualityStatus();ingest.className='ingest-node '+(actualIngest?.status||(state==='failed'?'blocked':state==='completed'&&data.data_intake?.published?'completed':'waiting'));submission.classList.toggle('needs-correction',state==='failed');
+ const stamp=data?.data_intake?.checked_at;if(state==='failed'&&stamp&&stamp!==qualityAlertStamp){qualityAlertStamp=stamp;notice('QC returned the submission: '+(data.data_intake.quality_check.errors?.[0]?.message||'Correct the flagged records.')+' The corrected example is resubmitted automatically.');}
  gate.className='quality-gate '+state;gate.querySelector('small').textContent={completed:'✓ Pass',failed:'× Fail',running:'Check…',waiting:'Ready'}[state];
  gate.style.transform='translateY(-83px)';
- gate.title='Owner · Jessica, Tiffany';
+ gate.title='View the data quality check';
+ if(!ingest.querySelector('.source-link')){const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource('ingest');};ingest.append(link);}sourceLink('ingest');ingest.onmouseenter=()=>showPreview('ingest');ingest.onmouseleave=hidePreview;
+ const intakeSelected=selected==='data'&&(!dataDraft||dataDraft==='new');for(const el of [submission,gate,ingest]){el.classList.toggle('impacted',intakeSelected);el.classList.toggle('outside-impact',!!selected&&!intakeSelected);}
  gate.setAttribute('aria-label','Quality check: '+{completed:'passed',failed:'failed',running:'checking',waiting:'ready'}[state]+'. View checks.');
 }
 function showQualityRecord(){
@@ -240,8 +246,8 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  if(key==='data'){const choices=[...(data.data_versions||[2023]).map(v=>[String(v),'Release '+v]),['new',Number(data.latest_database_version)>=2024?'Replay new-data update':'Add checked batch']];const signature=JSON.stringify(choices);if($('data-version').dataset.choices!==signature){$('data-version').replaceChildren(...choices.map(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;return option;}));$('data-version').dataset.choices=signature;}$('data-version').value=dataDraft||'new';}
  $('sql-button').hidden=key!=='extract';$('sql-button').disabled=!nextSource('extract');
  drawBranches(key,busy);
- $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?(replayData?'Replay data update →':'Add data + run →'):pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()==='failed'&&!busy){$('selection-title').textContent='Correct and resubmit';$('run').textContent='Correct & resubmit →';}
- if(submittingData&&qualityStatus()!=='failed'&&!busy){$('selection-title').textContent='Data submission';$('progress').textContent='Submit → QC → correct any flagged records';$('run').textContent='Submit data →';}
+ $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?(replayData?'Replay data update →':'Add data + run →'):pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()==='failed'&&!busy){$('selection-title').textContent='Retry data submission';$('run').textContent='Retry submission →';}
+ if(submittingData&&qualityStatus()!=='failed'&&!busy){$('selection-title').textContent='Data submission';$('progress').textContent='QC returns once → automatic resubmission → full workflow';$('run').textContent='Submit data →';}
  if(key==='data'&&dataDraft&&dataDraft!=='new'){$('selection-title').textContent='Data release '+dataDraft;$('progress').textContent='Restore this snapshot → 13 analysis stages';$('run').textContent=busy?'Starting…':'Run with v'+dataDraft+' →';}
  $('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||dataDraft!=='new'||!data.database_connected;$('invalid').disabled=busy||!!stale;
  $('record-dot').className=$('live-dot').className;$('verified').textContent=time(data.source?.last_success);$('message').className='';
@@ -249,6 +255,7 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  if(data.has_run===false&&!busy){$('message').textContent='Ready · verified baseline inputs available';$('run-link').removeAttribute('href');}
  if(data.demo?.reset_at&&!busy){const seconds=Math.max(0,Math.ceil((Date.parse(data.demo.reset_at)-Date.now())/1000));$('message').textContent+=' · resets in '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');}
  if(cloudBlocked&&!busy&&!stale){$('message').textContent=data.session.message.includes('owner')?'Viewing only · owner GitHub connection needed':data.session.message;$('message').className='read-only';}
+ if(data.intake_stages?.some(j=>j.correction_phase==='resubmitting')){$('message').textContent='QC returned the example → correcting and resubmitting automatically';}else if(data.intake_stages?.some(j=>j.correction_phase==='rechecking')){$('message').textContent='Corrected example submitted → checking again';}
  if(qc&&!qc.accepted&&!busy){$('message').textContent='QC failed on GitHub · returned to Korea · loading and extraction blocked';}
  drawQuality();drawCpueProducts();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
 async function refresh(force=false){if(window.workshopActive===false||refreshing)return;if(!force&&data?.status==='completed'&&!expected&&Date.now()-lastRefresh<10000)return;refreshing=true;lastRefresh=Date.now();try{const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw Error();const next=await r.json();if(!next.ready)throw Error();data=next;if(data.has_run===false&&!expected){consoleRecord=null;$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}if(expected===data.commit||(data.database_version&&expected==='db-'+data.database_version)){expected='';loadBranches();}draw();}catch{$('message').textContent='Live connection unavailable · retrying';$('run').disabled=true;}finally{refreshing=false;}}
@@ -293,15 +300,15 @@ async function openSource(key){
  if(key==='data'){
   $('source-meta').textContent='Supabase · saved snapshot · read-only records';const frame=document.createElement('iframe');frame.title='Database snapshot preview';frame.setAttribute('sandbox','allow-scripts allow-same-origin');frame.referrerPolicy='no-referrer';frame.src='https://kyuhank.github.io/cpue-actions-demo/data.html?version='+(dataDraft&&dataDraft!=='new'?dataDraft:data?.database_version||2023);body.append(frame);return;
  }
- const source=nextSource(key);if(!source||!/^kyuhank\/cpue-demo-(extract|cpue|inputs|assessment|synthesis|report)$/.test(source.repository)||!/^[a-f0-9]{40}$/.test(source.commit)){body.textContent='Loading the registered source. Try again in a moment.';return;}
+ const source=nextSource(key);if(!source||!/^kyuhank\/cpue-(actions-demo|demo-(extract|cpue|inputs|assessment|synthesis|report))$/.test(source.repository)||!/^[a-f0-9]{40}$/.test(source.commit)){body.textContent='Loading the registered source. Try again in a moment.';return;}
  $('source-meta').textContent=source.repository+' · '+source.branch+' · '+source.commit.slice(0,12);
  const picker=document.createElement('select'),code=document.createElement('pre');picker.id='source-file';picker.setAttribute('aria-label','Repository file');body.append(picker,code);
  const base='https://raw.githubusercontent.com/'+source.repository+'/'+source.commit+'/';
  const load=async()=>{const file=picker.value;code.textContent='Loading '+file+'…';try{const url=base+file.split('/').map(encodeURIComponent).join('/');let text=sourceCache.get(url);if(text===undefined){const r=await fetch(url,{signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error('The file is temporarily unavailable.');text=(await r.text()).slice(0,60000);sourceCache.set(url,text);}if(ticket===sourceTicket&&picker.value===file)code.textContent=text;}catch(e){if(ticket===sourceTicket)code.textContent=e.message;}};
  picker.onchange=load;
  // All files come from the fixed public module and the selected, registered commit.
- let files=['README.md'];
- try{const url='https://api.github.com/repos/'+source.repository+'/git/trees/'+source.commit;let tree=sourceCache.get(url);if(!tree){const r=await fetch(url,{signal:AbortSignal.timeout(10000)});if(r.ok){tree=await r.json();sourceCache.set(url,tree);}}if(tree?.tree)files=tree.tree.filter(f=>f.type==='blob'&&/\.(md|py|sql|json|yml|qmd)$/.test(f.path)).map(f=>f.path).sort((a,b)=>a==='README.md'?-1:b==='README.md'?1:a.localeCompare(b));}catch{}
+ let files=source.repository==='kyuhank/cpue-actions-demo'?['scripts/data_intake.py','.github/workflows/toy-pipeline.yml','supabase/functions/workshop-api/batches.json']:['README.md'];
+ try{const url='https://api.github.com/repos/'+source.repository+'/git/trees/'+source.commit;let tree=sourceCache.get(url);if(!tree){const r=await fetch(url,{signal:AbortSignal.timeout(10000)});if(r.ok){tree=await r.json();sourceCache.set(url,tree);}}if(tree?.tree&&source.repository!=='kyuhank/cpue-actions-demo')files=tree.tree.filter(f=>f.type==='blob'&&/\.(md|py|sql|json|yml|qmd)$/.test(f.path)).map(f=>f.path).sort((a,b)=>a==='README.md'?-1:b==='README.md'?1:a.localeCompare(b));}catch{}
  if(ticket!==sourceTicket)return;
  picker.replaceChildren(...files.map(file=>{const option=document.createElement('option');option.value=file;option.textContent=file;return option;}));load();
 }

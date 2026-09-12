@@ -1,5 +1,5 @@
 """Submit, check, and prepare the fixed synthetic batch in separate Actions jobs."""
-import hashlib, html, json, os, sys, tarfile
+import hashlib, html, json, os, sys, tarfile, time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.request import Request, urlopen
@@ -41,14 +41,31 @@ def main():
         if os.getenv('WORKSHOP_INTAKE_MODE')=='invalid':batch['sets'][0][3]=0
         write(key,{'submission.json':batch,'receipt.json':{'owner':'Korea','release':2024,'rows':len(batch['sets']),'sha256':digest(canonical(batch))}})
         print(f'SUBMISSION complete: Korea; {len(batch["sets"])} records; receipt and checksum saved',flush=True)
+    elif key=='resubmit':
+        original=json.loads((ROOT/'stages/submission/outputs/submission.json').read_text())
+        rejected=json.loads((ROOT/'stages/qc/outputs/quality.json').read_text())
+        fixed=json.loads((ROOT/'supabase/functions/workshop-api/batches.json').read_text())['2024']
+        expected=json.loads(json.dumps(fixed));expected['sets'][0][3]=0
+        if os.getenv('WORKSHOP_INTAKE_MODE')!='invalid' or original!=expected or rejected['accepted'] or [e['code'] for e in rejected['errors']]!=['positive_effort']:
+            raise SystemExit('Only the fixed demonstration correction may be resubmitted automatically')
+        print('RETURN: hooks must be greater than zero; submission returned with the failed record ID',flush=True)
+        print('RESUBMIT: applying the predefined demonstration correction once',flush=True)
+        time.sleep(4)
+        write('qc',{'first-quality.json':rejected,'accepted-submission.json':fixed,'correction.json':{
+            'automatic_demo_correction':True,'attempt':2,'field':'hooks','set_id':fixed['sets'][0][0],
+            'before':0,'after':fixed['sets'][0][3],'original_sha256':digest(canonical(original)),
+            'resubmitted_sha256':digest(canonical(fixed))}},False)
+        print('RESUBMIT complete: corrected example saved; QC must pass before loading',flush=True)
     elif key=='qc':
-        batch=json.loads((ROOT/'stages/submission/outputs/submission.json').read_text());quality=check(batch)
+        corrected=ROOT/'stages/qc/outputs/accepted-submission.json'
+        batch=json.loads((corrected if corrected.exists() else ROOT/'stages/submission/outputs/submission.json').read_text());quality=check(batch)
         write(key,{'quality.json':quality},quality['accepted'])
         for error in quality['errors']:print('::error title=QC returned to Korea::'+error['message']+' '+json.dumps(error.get('examples',[])),flush=True)
         print('QC '+('complete: accepted; release may be prepared' if quality['accepted'] else 'FAILED: returned to Korea; correct and resubmit; loading and extraction blocked'),flush=True)
         if not quality['accepted']:raise SystemExit(1)
     elif key=='ingest':
-        batch=json.loads((ROOT/'stages/submission/outputs/submission.json').read_text());quality=json.loads((ROOT/'stages/qc/outputs/quality.json').read_text())
+        corrected=ROOT/'stages/qc/outputs/accepted-submission.json'
+        batch=json.loads((corrected if corrected.exists() else ROOT/'stages/submission/outputs/submission.json').read_text());quality=json.loads((ROOT/'stages/qc/outputs/quality.json').read_text())
         if not quality['accepted'] or not check(batch)['accepted']:raise SystemExit('QC did not pass')
         batch['sets']=sorted(batch['sets'],key=lambda r:r[0]);sha=digest(canonical(batch))
         print('PREPARE: normalise fields; sort record identifiers; verify the accepted batch checksum',flush=True)

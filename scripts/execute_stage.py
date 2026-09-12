@@ -21,7 +21,9 @@ elif mode=='run':
  for name,value in context.items():
   if not name.startswith('TOY_'):raise SystemExit('Unknown execution setting')
   command+=['--env',name+'='+value]
- for name in ('GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','ImageVersion','TOY_DEMO_PACE_SECONDS'):command+=['--env',name]
+ for name in ('GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','ImageVersion'):command+=['--env',name]
+ # The frozen workflow context controls presentation pacing across reusable jobs.
+ if 'TOY_DEMO_PACE_SECONDS' not in context:command+=['--env','TOY_DEMO_PACE_SECONDS']
  command +=[context['TOY_CONTAINER_IMAGE'],'python','-u','scripts/run_stage.py',key]
  subprocess.run(command,check=True)
  record=json.loads((ROOT/'stages'/key/'record.json').read_text())

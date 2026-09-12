@@ -19,6 +19,9 @@ with sync_playwright() as pw:
    r.fulfill(body=(ROOT/'docs'/path[1:]).read_text(),content_type='text/html' if path.endswith('html') else 'text/css' if path.endswith('css') else 'text/javascript')
   else:r.fulfill(json={'files':[]})
  page.route('**/*',route);page.goto('https://workshop.test/guest.html');page.wait_for_selector('.task-card')
+ owners = page.evaluate('Object.fromEntries(Object.entries(tasks).map(([key, task]) => [key, task.owner]))')
+ assert owners['cpue'] == 'Nan' and owners['assessment'] == 'Kyuhan'
+ assert all(isinstance(owner, str) and owner and ',' not in owner and '&' not in owner for owner in owners.values())
  def update(running=(),reused=(),phase=None,failed=()):
   page.evaluate('''([running,reused,phase,failed])=>{
    data.has_run=true;for(const s of data.stages){s.status=running.includes(s.key)?'running':failed.includes(s.key)?'failed':'completed';s.reused=reused.includes(s.key);s.correction_phase=s.key==='qc'?phase:null;}draw();

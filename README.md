@@ -1,13 +1,15 @@
 # CPUE workflow demo
 
-An executable example connecting synthetic fishery data to CPUE indices, assessment inputs, model comparisons and a report.
+A working example connecting fishery records, CPUE analyses and stock assessment. All data and models are illustrative.
 
-[Open the demo](https://kyuhank.github.io/cpue-actions-demo/) · [Browse the synthetic database](https://kyuhank.github.io/cpue-actions-demo/data.html)
+[Open the demo](https://kyuhank.github.io/cpue-actions-demo/) · [Browse the database](https://kyuhank.github.io/cpue-actions-demo/data.html)
+
+Select a starting job and code versions, then **Run**. The selected jobs and their dependants execute on GitHub Actions; unchanged outputs are reused. No visitor login is required. The orchestration view shows each job’s owner, status, logs and outputs.
 
 ```mermaid
 flowchart LR
     U[Data submission] --> Q[QC] --> L[Prepare & load] --> D[(Database)] --> E[Extract]
-    Q -. Corrections .-> U
+    Q -. Correct and resubmit .-> U
     E --> C[CPUE analyses A / B]
     C --> CS[Results summary] --> CR[CPUE report]
     E --> I[Input preparation]
@@ -15,13 +17,21 @@ flowchart LR
     A --> S[Results summary] --> R[Assessment report]
 ```
 
-Analysis code lives in six repositories. CPUE alternatives use the `model-a` and `model-b` branches; assessment alternatives use `structure-1` and `structure-2`. [modules.lock.json](modules.lock.json) fixes the exact commits used together. Shared model utilities and orchestration live here. Adopting a module change means updating its registered commit and the data repository’s workflow pin; the workflow then invalidates that stage and its dependants.
+## Modules
 
-[Extraction](https://github.com/kyuhank/cpue-demo-extract) · [CPUE](https://github.com/kyuhank/cpue-demo-cpue) · [Inputs](https://github.com/kyuhank/cpue-demo-inputs) · [Assessment](https://github.com/kyuhank/cpue-demo-assessment) · [Results summary](https://github.com/kyuhank/cpue-demo-synthesis) · [Report](https://github.com/kyuhank/cpue-demo-report)
+| Repository | Output |
+| --- | --- |
+| [Data](https://github.com/kyuhank/cpue-toy-data) | Checked database releases |
+| [Extraction](https://github.com/kyuhank/cpue-demo-extract) | Records selected by SQL |
+| [CPUE](https://github.com/kyuhank/cpue-demo-cpue) | Indices, comparisons and CPUE report |
+| [Input preparation](https://github.com/kyuhank/cpue-demo-inputs) | Model inputs |
+| [Assessment](https://github.com/kyuhank/cpue-demo-assessment) | Biomass estimates and model summaries |
+| [Results summary](https://github.com/kyuhank/cpue-demo-synthesis) | Comparison plots and tables |
+| [Report](https://github.com/kyuhank/cpue-demo-report) | Assessment report and reproduction bundle |
 
-Select a stage and a registered branch, then Run. [module-branches.json](module-branches.json) pins each choice to an exact commit; moving the branch later does not alter a saved run. Each stage has its own selection. Run applies all pending branch choices in one commit and recalculates their combined downstream paths. Verified, unchanged outputs are reused. Each module repository checks repeat execution in CI. The live demo verifies those checks and runs the selected code in one pinned container on one GitHub runner. Analyses within a group run in parallel; the next group waits for all required results. This avoids repeated runner setup and artifact transfers. [A separate-runner alternative](.github/workflows/distributed-pipeline.yml) is also available. The orchestration view groups jobs into tasks with owners, outputs and execution records. Failed QC returns a correction record and blocks loading. Every job produces a standalone HTML result; each module’s Pages site opens that result by run ID. The report is a short assessment update with a reproducible appendix. Card links open the database or the selected repository branch; Extract also previews its pinned SQL.
+Each module has reproducibility checks. The live demo runs the selected commits in one pinned container, with parallel jobs grouped by stage. Reports record the data, code, settings, software and input/output hashes.
 
-The data selector restores a published release. Data are bounded to the baseline plus one added batch; further data runs reuse that release. A versioned baseline supports intermediate starts, including after reset. Visitor runs expire ten minutes after completion; the fixed baseline remains available. A downloaded report retains its synthetic snapshot, source code, settings and replay package.
+[module-branches.json](module-branches.json) registers selectable commits; [modules.lock.json](modules.lock.json) defines the default combination. Branch updates are adopted explicitly, so saved runs retain their original code versions.
 
 ## Run locally
 
@@ -29,8 +39,8 @@ The data selector restores a published release. Data are bounded to the baseline
 python3 run.py
 ```
 
-Open `stages/report/outputs/report.html`. Python standard library only; the initial module download needs internet access.
+Open `stages/report/outputs/report.html`. Requires Python and internet access for the initial module download; no third-party Python packages are needed.
 
-The example compares two CPUE formulations and four age-structured assessment configurations. All data are synthetic; model assumptions and limitations are recorded in the report.
+Visitor outputs expire ten minutes after completion. Fixed snapshots and a baseline remain available for fresh runs. Added data are limited to one batch. Downloaded reports retain their reproduction bundle.
 
-[Data and triggers](https://github.com/kyuhank/cpue-toy-data) · [Hosted data service](supabase/README.md) · [Container](https://github.com/PacificCommunity/ofp-sam-docker-images/tree/main/cpue-workshop)
+[Hosted service and controls](supabase/README.md) · [Container source](https://github.com/PacificCommunity/ofp-sam-docker-images/tree/main/cpue-workshop)

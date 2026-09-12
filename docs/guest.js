@@ -6,10 +6,10 @@ const tasks={
  submission:{name:'Data submission',owner:'Korea',role:'Data provider'},
  qc:{name:'Data quality check',owner:'Jessica',role:'Data team'},
  ingest:{name:'Prepare & load',owner:'Tiffany',role:'Data team'},
- extract:{name:'Data extraction',owner:'Jessica, Tiffany',role:'Data team'},
- cpue:{name:'CPUE analysis',owner:'Kyuhan',role:'CPUE analyst'},
+ extract:{name:'Data extraction',owner:'Jessica',role:'Data team'},
+ cpue:{name:'CPUE analysis',owner:'Nan',role:'CPUE analyst'},
  inputs:{name:'Input preparation',owner:'Thom',role:'Data and assessment teams'},
- assessment:{name:'Stock assessment',owner:'Nan',role:'Assessment analyst'},
+ assessment:{name:'Stock assessment',owner:'Kyuhan',role:'Assessment analyst'},
  synthesis:{name:'Results summary',owner:'Paul',role:'Assessment team'},
  report:{name:'Assessment report',owner:'Kyuhan',role:'Author and reviewers'}
 };

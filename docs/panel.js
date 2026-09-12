@@ -136,7 +136,7 @@ function showPreview(key){
   if(data.has_run&&validPreviewSource(planned)&&planned.commit!==source.commit){$('preview-next').hidden=false;$('preview-next').textContent='Next run: '+planned.branch+' · '+planned.commit.slice(0,8);}
  }
  $('preview-execution').hidden=!data.has_run||key==='data';
- $('preview-execution').onclick=()=>{hidePreview();qualityRecordOpen=key==='qc';$('console').hidden=false;$('logs').textContent='Hide record';$('logs').setAttribute('aria-expanded','true');if(qualityRecordOpen)showQualityRecord();else showConsole();};
+ $('preview-execution').onclick=()=>{hidePreview();qualityRecordOpen=key==='qc';setConsoleOpen(true,qualityRecordOpen);};
  $('preview-title').textContent=(key==='qc'?'Quality check':names[key])+(key.startsWith('assessment_')||key.startsWith('prepare_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
  let lines=[];
  if(key==='data'||(!stage&&key==='qc')){
@@ -158,7 +158,7 @@ async function loadPreviewLog(key){
  try{const r=await fetch('/api/stage-log?stage='+key,{cache:'no-store'});if(r.ok){const record=await r.json();if(data.run_id===run){previewLog=record;previewLogAt=Date.now();updated=true;}}}catch{}finally{previewLogPending=false;}
  if(updated&&previewKey===key&&data.run_id===run&&previewLog?.stage===key)showPreview(key);
 }
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){hidePreview();$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){hidePreview();setConsoleOpen(false);}});
 function roundedRoute(points,radius=6){
  const clean=points.filter((p,i)=>!i||p[0]!==points[i-1][0]||p[1]!==points[i-1][1]);
  let d=`M${clean[0].join(',')}`;
@@ -183,7 +183,7 @@ function drawQuality(){
  let submission=$('submission-node');if(!submission){submission=document.createElement('div');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.innerHTML='<button class="node-control"><strong>Data submission</strong></button>';submission.onclick=()=>{selected='data';dataDraft='new';hidePreview();draw();};$('chain').append(submission);}
  submission.classList.toggle('selected',selected==='data'&&(!dataDraft||dataDraft==='new'));
  node('data').classList.toggle('selected',selected==='data'&&dataDraft!=='new');
- let ingest=$('ingest-node');if(!ingest){ingest=document.createElement('div');ingest.id='ingest-node';ingest.dataset.key='ingest';ingest.textContent='Prepare & load';ingest.title='Owner · Jessica, Tiffany. Align fields, formats and units; load accepted records into the database.';$('chain').append(ingest);}
+ let ingest=$('ingest-node');if(!ingest){ingest=document.createElement('div');ingest.id='ingest-node';ingest.dataset.key='ingest';ingest.textContent='Prepare & load';ingest.title='Owner · Tiffany. Align fields, formats and units; load accepted records into the database.';$('chain').append(ingest);}
  for(const [key,el] of [['submission',submission],['qc',gate]]){
 
   let link=el.querySelector('.source-link');if(!link){link=previewControl(key);el.append(link);}sourceLink(key);
@@ -296,6 +296,14 @@ function links(){
 }
 new ResizeObserver(()=>requestAnimationFrame(()=>{links();if(previewKey)showPreview(previewKey);if($('sql-view').open)placePopup($('sql-view'),node('extract'));})).observe($('chain'));
 function friendlyStep(name){if(name==='Retrieve locked analysis modules')return 'Load six code repositories at locked commits';if(name==='Prepare the pinned Docker environment')return 'Pull container image';if(name==='Checkout')return 'Check out analysis code';if(name==='Checkout source data')return 'Check out data settings';if(name==='Fetch versioned database snapshot')return 'Download the recorded data release';if(name==='Set up job')return 'Start runner';if(name==='Save the complete workflow outputs')return 'Save outputs';const stage=data?.stages.find(s=>s._step_number===data.execution?.jobs?.[0]?.steps.find(x=>x.name===name)?.number);return stage?names[stage.key]+(name.endsWith(' · reused')?' · reused':''):name;}
+function setConsoleOpen(open, qualityOnly = false, restoreFocus = false) {
+ qualityRecordOpen = open && qualityOnly;
+ $('console').hidden = !open;
+ $('logs').setAttribute('aria-expanded', String(open));
+ $('logs').textContent = open ? 'Close details' : 'Run details';
+ if (open) showConsole();
+ if (restoreFocus) $('logs').focus({preventScroll: true});
+}
 function showConsole(){const space=document.querySelector('main').getBoundingClientRect().bottom-document.querySelector('.action-bar').getBoundingClientRect().top+10;$('console').style.bottom=space+'px';$('notice').style.bottom=space+'px';if(!data)return;if(qualityRecordOpen){showQualityRecord();return;}if(data.has_run===false){$('console-title').textContent='Ready for a new demonstration';$('console-lines').textContent='The previous execution records have been cleared.';$('console-link').removeAttribute('href');return;}const steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),actual=consoleRecord?.run_id===data.run_id&&consoleRecord?.attempt===data.attempt;let lines=[];if(actual){$('console-title').textContent='GitHub console · completed run';lines=consoleRecord.lines.map(line=>line.replace(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s*/,(_,t)=>time(t)+'  '));}else{$('console-title').textContent='Live GitHub step record';for(const s of steps)if(s.started_at&&['in_progress','completed'].includes(s.status))lines.push(time(s.started_at)+'  '+(s.status==='completed'?(s.conclusion==='success'?'✓':s.name.endsWith(' · reused')?'↺':'×'):'▶')+' '+s.name);if(!lines.length)lines=['Waiting for GitHub to assign a runner.'];}if(expected){$('console-title').textContent='Update stored · waiting for GitHub';lines=[expected.startsWith('db-')?'Database release '+expected.slice(3):'Settings commit '+expected.slice(0,8),'The update triggers the workflow in the analysis repository.'];}const qc=data.data_intake?.quality_check,qcView=qc&&(!qc.accepted||selected==='data');if(qcView){$('console-title').textContent='Data quality check · Database';lines=qualityRecord();}const text=lines.join('\n'),el=$('console-lines');if(el.textContent!==text){el.textContent=text;el.scrollTop=el.scrollHeight;}$('console-link').href=data.run_url;$('console-link').textContent=qcView&&!qc.accepted?'View failed GitHub run ↗':'View run ↗';}
 async function loadConsole(){if(data.has_run===false||consolePending||data.status!=='completed'||(consoleRecord?.run_id===data.run_id&&consoleRecord?.attempt===data.attempt))return;consolePending=true;try{const r=await fetch('/api/console',{cache:'no-store'});if(r.ok){const next=await r.json();if(next.ready&&next.lines.length)consoleRecord=next;}}catch{}finally{consolePending=false;showConsole();}}
 function notice(text){$('notice-text').textContent=text;$('notice').hidden=false;}
@@ -318,14 +326,14 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  if(submittingData&&qualityStatus()!=='failed'&&!busy){$('selection-title').textContent='Data submission';$('progress').textContent='QC returns once → provider correction and resubmission → full workflow';$('run').textContent='Submit example data →';}
  if(key==='data'&&dataDraft&&dataDraft!=='new'){$('selection-title').textContent='Data release '+dataDraft;$('progress').textContent='Use this snapshot → 13 analysis stages';$('run').textContent=busy?'Starting…':'Run with v'+dataDraft+' →';}
  $('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||dataDraft!=='new'||!data.database_connected;$('invalid').disabled=busy||!!stale;
- $('record-dot').className=$('live-dot').className;$('verified').textContent=time(data.source?.last_success);$('message').className='';
+ $('verified').textContent=time(data.source?.last_success);$('message').className='';
  $('message').textContent=sending?(changeKind==='data'?'Validate and publish incoming data…':'Commit the selected update…'):expected?'Update stored → waiting for the next GitHub run':stale?'Connection interrupted · showing the last verified run':active?'Running · '+(data.stages.filter(s=>s.status==='running').map(s=>names[s.key]).join(' + ')||friendlyStep(active.name)):data.status==='completed'?(data.conclusion==='success'?'✓ Outputs saved · report ready':'GitHub run '+data.conclusion):'GitHub is assigning a runner…';
  if(data.has_run===false&&!busy){$('message').textContent='Ready · verified baseline inputs available';$('run-link').removeAttribute('href');}
  if(data.demo?.reset_at&&!busy){const seconds=Math.max(0,Math.ceil((Date.parse(data.demo.reset_at)-Date.now())/1000));$('message').textContent+=' · resets in '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');}
  if(cloudBlocked&&!busy&&!stale){$('message').textContent=data.session.message.includes('owner')?'Viewing only · owner GitHub connection needed':data.session.message;$('message').className='read-only';}
  if(data.intake_stages?.some(j=>j.correction_phase==='resubmitting')){$('message').textContent='QC returned the example → provider correction and resubmission';}else if(data.intake_stages?.some(j=>j.correction_phase==='rechecking')){$('message').textContent='Corrected example submitted → checking again';}
  if(qc&&!qc.accepted&&!busy){$('message').textContent='QC failed on GitHub · returned to Korea · loading and extraction blocked';}
- drawSavedInputs();narrate();if(cloudBlocked&&!busy&&!stale&&data.session.next_update){const wait=Math.max(0,Math.ceil((Date.parse(data.session.next_update)-Date.now())/1000));if(wait){$('run').textContent='Run again in '+wait+' s';$('message').textContent='Run complete. The next run is available in '+wait+' seconds.';}else if(data.session.remaining>0&&data.demo?.phase!=='cleaning'&&!data.session.message.includes('owner')){$('run').textContent='Confirming completion…';$('message').textContent='All selected jobs have finished. Confirming the run record…';}}drawQuota(busy);drawQuality();drawCpueProducts();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
+ drawSavedInputs();narrate();if(cloudBlocked&&!busy&&!stale&&data.session.next_update){const wait=Math.max(0,Math.ceil((Date.parse(data.session.next_update)-Date.now())/1000));if(wait){$('run').textContent='Run again in '+wait+' s';$('message').textContent='Run complete. The next run is available in '+wait+' seconds.';}else if(data.session.remaining>0&&data.demo?.phase!=='cleaning'&&!data.session.message.includes('owner')){$('run').textContent='Confirming completion…';$('message').textContent='All selected jobs have finished. Confirming the run record…';}}drawQuota(busy);drawRecordState();drawQuality();drawCpueProducts();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
 function drawSavedInputs(){
  for(const el of $('chain').querySelectorAll('.saved-feeder,.using-saved'))el.classList.remove('saved-feeder','using-saved');
  for(const {stage,saved,mixed} of savedInputTransfers()){
@@ -345,17 +353,42 @@ function drawQuota(busy){
   document.querySelector('.record').dataset.phase='limited';
  }
 }
-function operationText(title,detail=''){
- const heading=document.createElement('strong');heading.className='operation-title';heading.textContent=title;
- const note=document.createElement('span');note.className='operation-detail';note.textContent=detail;note.hidden=!detail;
- $('message').replaceChildren(heading,note);
+function drawRecordState() {
+ const record = document.querySelector('.record');
+ if (data.source?.stale || sending || pendingRun || data.status === 'queued') {
+  record.dataset.phase = 'waiting';
+ } else if (data.has_run === false && record.dataset.phase !== 'limited') {
+  record.dataset.phase = 'ready';
+ }
+ const symbols = {complete: 'completed', failed: 'failed', limited: 'blocked', running: 'running', ready: 'ready'};
+ let symbol = symbols[record.dataset.phase] || 'waiting';
+ if (record.dataset.phase === 'correction') {
+  const correction = data.intake_stages?.find(stage => stage.key === 'qc')?.correction_phase;
+  symbol = correction === 'returned' ? 'returned' : 'running';
+ }
+ const icon = $('record-dot');
+ // Preserve the spinner between polls so its animation does not restart.
+ if (icon.dataset.symbol !== symbol) {
+  icon.innerHTML = statusSymbol(symbol);
+  icon.dataset.symbol = symbol;
+ }
 }
-function narrate(){
- const record=document.querySelector('.record'),qcJob=data.intake_stages?.find(j=>j.key==='qc'),phase=qcJob?.correction_phase;
- const running=data.stages.filter(s=>s.status==='running'&&!s.reused),intake=data.intake_stages?.find(j=>j.status==='running'&&!j.skipped);
- const setup=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]).find(s=>s.status==='in_progress');
- const setupText=({'Set up job':['Prepare the runner.','Set up the machine that will run the jobs.'],Checkout:['Retrieve the analysis code.','Use the code versions selected for this run.'],'Checkout source data':['Retrieve the data settings.','Read the recorded data release and analysis configuration.'],'Prepare code and container':['Prepare the code and software.','Load the selected code versions and the saved container image.'],'Start analysis container':['Start the analysis software.','The container provides the software required by the jobs.'],'Fetch versioned database snapshot':['Read the selected database release.','Verify the snapshot before extracting records.'],'Restore and verify reusable outputs':['Check the inputs and execution plan.','Verify saved outputs before deciding which jobs need to run.']})[setup?.name];
- const operations={
+function operationText(title, detail = '') {
+ const message = $('message');
+ const text = title.replace(/\.$/, '');
+ if (message.firstElementChild?.className === 'operation-title'
+     && message.firstElementChild.textContent === text
+     && message.lastElementChild.textContent === detail) return;
+ const heading = document.createElement('strong');
+ heading.className = 'operation-title';
+ heading.textContent = text;
+ const note = document.createElement('span');
+ note.className = 'operation-detail';
+ note.textContent = detail;
+ note.hidden = !detail;
+ message.replaceChildren(heading, note);
+}
+const JOB_MESSAGES = {
   submission:['Submit new data.','Send the example records for quality checks.'],
   qc:['Check the submission.','Validate fields, effort and catch before loading.'],
   ingest:['Prepare and load the data.','Arrange accepted records and save a versioned database release.'],
@@ -368,7 +401,13 @@ function narrate(){
   prepare_year:['Build the assessment inputs · CPUE B.','Combine the CPUE index and catch in the model’s required format.'],
   synthesis:['Compare the assessment results.','Bring the model outputs together in plots and tables.'],
   report:['Build the assessment report.','Save the results with their data, code and software versions.']
- };
+};
+function narrate(){
+ const record=document.querySelector('.record'),qcJob=data.intake_stages?.find(j=>j.key==='qc'),phase=qcJob?.correction_phase;
+ const running=data.stages.filter(s=>s.status==='running'&&!s.reused),intake=data.intake_stages?.find(j=>j.status==='running'&&!j.skipped);
+ const setup=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]).find(s=>s.status==='in_progress');
+ const setupText=({'Set up job':['Prepare the runner.','Set up the machine that will run the jobs.'],Checkout:['Retrieve the analysis code.','Use the code versions selected for this run.'],'Checkout source data':['Retrieve the data settings.','Read the recorded data release and analysis configuration.'],'Prepare code and container':['Prepare the code and software.','Load the selected code versions and the saved container image.'],'Start analysis container':['Start the analysis software.','The container provides the software required by the jobs.'],'Fetch versioned database snapshot':['Read the selected database release.','Verify the snapshot before extracting records.'],'Restore and verify reusable outputs':['Check the inputs and execution plan.','Verify saved outputs before deciding which jobs need to run.']})[setup?.name];
+
  record.dataset.phase=data.status==='completed'?'complete':'running';
  if(data.source?.stale||(!sending&&!expected&&data.session&&!data.session.can_update&&data.status==='completed'))return;
  let text;
@@ -378,20 +417,22 @@ function narrate(){
  else if(phase==='returned'){text=['QC failed · return for correction.','One record has zero hooks. The provider needs to correct it.'];record.dataset.phase='correction';}
  else if(phase==='resubmitting'){text=['Resubmit the corrected data.','The provider’s corrected file is sent back for QC.'];record.dataset.phase='correction';}
  else if(phase==='rechecking'){text=['Check the corrected submission.','Only accepted records continue to the database.'];record.dataset.phase='correction';}
- else if(intake)text=intake.key==='qc'&&phase==='corrected'?['QC passed on the second check.','Save the accepted records and continue to loading.']:operations[intake.key];
+ else if(intake)text=intake.key==='qc'&&phase==='corrected'?['QC passed on the second check.','Save the accepted records and continue to loading.']:JOB_MESSAGES[intake.key];
  else if(databaseActive())text=['Read the selected database release.','Verify the saved snapshot before extracting records.'];
  else if(running.length>1){
   const cpue=running.filter(s=>['cpue_vessel','cpue_year'].includes(s.key)).length,assess=running.filter(s=>s.key.startsWith('assessment_')).length,prepare=running.some(s=>s.key.startsWith('prepare_'));
   text=cpue>1?['Run both CPUE analyses.','The same records produce two alternative abundance indices.']:assess>1?['Run the assessment models.','Fit '+assess+' model configurations in parallel using the prepared inputs.']:prepare?['Prepare inputs and compare CPUE.','Create model inputs alongside the CPUE comparison plots and tables.']:['Run independent jobs together.','Each downstream job waits until its required inputs are ready.'];
  }
- else if(running.length){const key=running[0].key;text=operations[key]||['Run '+inputLabel(key)+'.','Fit the model to the prepared assessment inputs.'];}
+ else if(running.length){const key=running[0].key;text=JOB_MESSAGES[key]||['Run '+inputLabel(key)+'.','Fit the model to the prepared assessment inputs.'];}
  else if(setupText)text=setupText;
  else if(data.has_run===false)text=['Choose where to start.','Select a stage and run it with its dependent jobs.'];
  else if(data.status!=='completed'&&data.stages.every(s=>s.status==='completed'))text=['Save the completed results.','Publish the job outputs so they can be inspected and reused.'];
  else if(data.status!=='completed')text=['Prepare the next group of jobs.','Pass the completed outputs to the jobs that need them.'];
  else if(data.conclusion==='success'){
   const ran=data.stages.filter(s=>!s.reused).length+(data.intake_stages||[]).filter(s=>!s.skipped).length,reused=data.stages.filter(s=>s.reused).length;
-  text=['Results are ready.',ran+(ran===1?' job completed':' jobs completed')+(reused?' · '+reused+' reused unchanged':'')+'. Inspect outputs in the Orchestration tool.'];
+  const executed=data.stages.filter(s=>!s.reused).map(s=>s.key);
+  const title=executed.length&&executed.every(k=>['cpue_summary','cpue_report'].includes(k))?'CPUE results are ready':executed.length===1&&executed[0]==='report'?'Assessment report is ready':'Workflow complete';
+  text=[title,ran+(ran===1?' job completed':' jobs completed')+(reused?' · '+reused+' results reused unchanged':'')];
  }else{
   const failed=[...(data.intake_stages||[]),...data.stages].find(s=>s.status==='failed');text=[(failed?names[failed.key]:'The workflow')+' stopped.','Open the failed job to see what needs to be corrected.'];record.dataset.phase='failed';
  }
@@ -448,7 +489,7 @@ async function refresh(force=false){
   // A poll started before the click must not acknowledge the run before its POST returns.
   if(sending)return;
   if(!observeRun(next)){if(pendingRun&&Date.now()-pendingRun.started>60000){notice('The run is taking longer to appear. Checking its execution receipt; no duplicate request has been sent.');}return;}
-  if(data.has_run===false&&!pendingRun){consoleRecord=null;$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}
+  if(data.has_run===false&&!pendingRun){consoleRecord=null;setConsoleOpen(false);}
   draw();
  }catch{$('message').textContent='Live connection unavailable · retrying';$('run').disabled=true;}finally{refreshing=false;}
 }
@@ -533,7 +574,7 @@ async function publish(invalid=false){
   if(!r.ok)throw Error(result.detail||'Update failed');
   expected=result.published===false?'':result.commit||'';
   if(pendingRun){pendingRun.run_id=result.run_id;pendingRun.run_url=result.run_url;}
-  if(result.published===false){pendingRun=null;data=previous;$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}
+  if(result.published===false){pendingRun=null;data=previous;setConsoleOpen(false);}
  }catch(e){
   // A lost POST response does not mean GitHub rejected the request. Read its receipt once.
   let receipt=null;
@@ -556,8 +597,9 @@ $('sql-button').onclick=async()=>{
  }catch(error){$('sql-content').textContent=error.message;}
  if($('sql-view').open)placePopup($('sql-view'),node('extract'));
 };
+$('console-close').onclick=()=>setConsoleOpen(false,false,true);
 $('data-version').onchange=()=>{dataDraft=$('data-version').value;draw();};
- $('run').onclick=()=>publish(selectedKey()==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()!=='failed');$('invalid').onclick=()=>publish(true);$('logs').onclick=()=>{qualityRecordOpen=false;$('console').hidden=!$('console').hidden;$('logs').setAttribute('aria-expanded',String(!$('console').hidden));$('logs').textContent=$('console').hidden?'Show record':'Hide record';showConsole();};$('dismiss').onclick=()=>{$('notice').hidden=true;};
+ $('run').onclick=()=>publish(selectedKey()==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()!=='failed');$('invalid').onclick=()=>publish(true);$('logs').onclick=()=>setConsoleOpen($('console').hidden);$('dismiss').onclick=()=>{$('notice').hidden=true;};
 if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');refresh();loadBranches();setInterval(()=>{refresh();refreshLive();if(pendingRun||data?.status==='queued'||data?.status==='completed'&&!data?.session?.can_update)draw();},250);
 async function heartbeat(){try{const r=await fetch('/api/presentation-info',{cache:'no-store'});if(r.ok&&(await r.json()).presentation==='cpue-workshop'&&parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');}catch{}}
 heartbeat();setInterval(heartbeat,4000);

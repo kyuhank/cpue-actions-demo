@@ -26,7 +26,9 @@ with tempfile.TemporaryDirectory(prefix='cpue-baseline-') as folder:
     for name in ('pipeline','scripts'):
         shutil.copytree(ROOT/name, work/name, ignore=shutil.ignore_patterns('__pycache__'))
     (work/'config').mkdir(); (work/'config/stages.json').write_text('{}')
-    snapshot_hash = module.materialise(snapshot, work/'data/toy-fishery.sqlite')
+    (work/'supabase').mkdir()
+    shutil.copyfile(ROOT/'supabase/snapshot.py',work/'supabase/snapshot.py')
+    (work/'snapshot.json').write_text(json.dumps(snapshot))
     command = ['docker','run','--rm','--network','none','--user',f'{os.getuid()}:{os.getgid()}',
                '-v',f'{work}:/work','-w','/work']
     for name,value in {'TOY_CODE_COMMIT':commit,'TOY_CONTAINER_IMAGE':IMAGE,
@@ -35,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix='cpue-baseline-') as folder:
                        'GITHUB_RUN_ID':'baseline-2023','ImageVersion':'pinned container',
                        'TOY_DEMO_PACE_SECONDS':'0'}.items():
         command += ['-e',name+'='+value]
-    code = "import subprocess,sys;sys.path.insert(0,'scripts');from workflow_plan import plan;[subprocess.run([sys.executable,'scripts/run_stage.py',key],check=True) for key in plan()['stages']]"
+    code = "import subprocess,sys,json;from supabase.snapshot import materialise;materialise(json.load(open('snapshot.json')),'data/toy-fishery.sqlite');sys.path.insert(0,'scripts');from workflow_plan import plan;[subprocess.run([sys.executable,'scripts/run_stage.py',key],check=True) for key in plan()['stages']]"
     subprocess.run(command+[IMAGE,'python','-c',code], check=True)
     target = ROOT/'baseline'; target.mkdir(exist_ok=True)
     with zipfile.ZipFile(target/'workflow.zip','w',zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
@@ -44,6 +46,7 @@ with tempfile.TemporaryDirectory(prefix='cpue-baseline-') as folder:
             for path in sorted(stage.rglob('*')):
                 if path.is_file() and (path.name=='record.json' or path.is_relative_to(stage/'outputs')):
                     archive.write(path,path.relative_to(work/'stages'))
+    snapshot_hash=hashlib.sha256((work/'data/toy-fishery.sqlite').read_bytes()).hexdigest()
     metadata = {'description':'Fixed synthetic results; retained when visitor runs expire.',
                 'version':2023,'code_commit':commit,'container':IMAGE,'snapshot_sha256':snapshot_hash,
                 'sha256':hashlib.sha256((target/'workflow.zip').read_bytes()).hexdigest()}

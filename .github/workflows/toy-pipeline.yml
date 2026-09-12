@@ -67,11 +67,17 @@ jobs:
           repository: ${{ inputs.data_repository }}
           ref: ${{ inputs.data_ref }}
           path: source-data
+      - name: Pull the pinned container
+        run: docker pull "$TOY_CONTAINER_IMAGE"
       - name: Fetch versioned database snapshot
         if: env.SUPABASE_URL != '' || inputs.data_version != ''
         env:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-        run: python3 supabase/snapshot.py
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
+            --env SUPABASE_URL --env SUPABASE_ANON_KEY --env TOY_DATABASE_VERSION --env TOY_SOURCE_DATABASE \
+            "$TOY_CONTAINER_IMAGE" python supabase/snapshot.py
+          python3 -c 'import json,os,pathlib; v=json.loads(pathlib.Path(os.environ["TOY_SOURCE_DATABASE"]).with_suffix(".release.json").read_text())["version"]; open(os.environ["GITHUB_ENV"],"a").write(f"TOY_SOURCE_PROVIDER=supabase\nTOY_SOURCE_VERSION={v}\n")'
       - name: Restore and verify reusable outputs
         id: plan
         env:
@@ -79,7 +85,6 @@ jobs:
         run: python3 scripts/workflow_plan.py
       - name: Prepare the pinned Docker environment
         run: |
-          docker pull "$TOY_CONTAINER_IMAGE"
           docker run -d --name cpue-workshop --network none --user "$(id -u):$(id -g)" \
             --volume "$PWD:/work" --workdir /work \
             --env TOY_CODE_COMMIT --env TOY_DATA_COMMIT --env TOY_DATA_REPOSITORY \

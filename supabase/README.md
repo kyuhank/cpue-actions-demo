@@ -3,6 +3,7 @@
 The service stores versioned synthetic data and connects accepted releases to the demonstration workflow.
 
 - `schema.sql`, `seed.sql`, `quality-check.sql`: baseline data and publication checks.
+- `saved-snapshots.sql`: fixed 2021 and 2022 snapshots, retained alongside the 2023 baseline.
 - `snapshot.py`: materialise a selected release as a SQLite snapshot.
 - `cloud-control.sql`: atomic request limits and dispatch deduplication.
 - `demo-lifecycle.sql`, `demo-cron.sql`: expire visitor runs and restore the baseline.

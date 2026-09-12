@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id);
 const positions={data:[1,1,5],extract:[3,1,5],cpue_vessel:[5,1,3],cpue_year:[5,3,5],prepare_vessel:[7,1,3],prepare_year:[7,3,5],assessment_vessel_ref:[9,1,2],assessment_vessel_high_m:[9,2,3],assessment_year_ref:[9,3,4],assessment_year_high_m:[9,4,5],synthesis:[11,1,5],report:[13,1,5]};
 const names={data:'Database',extract:'Extract',cpue_vessel:'CPUE A',cpue_year:'CPUE B',prepare_vessel:'Input prep',prepare_year:'Input prep',assessment_vessel_ref:'Assessment 1',assessment_vessel_high_m:'Assessment 2',assessment_year_ref:'Assessment 1',assessment_year_high_m:'Assessment 2',synthesis:'Synthesis',report:'Report'};
 const states={waiting:'Waiting',queued:'Queued',idle:'Queued',running:'Running',completed:'Complete',failed:'Failed',blocked:'Blocked',cancelled:'Cancelled'},icons={completed:'✓',running:'◌',failed:'×',blocked:'×',cancelled:'–'};
-let qualityRecordOpen=false;
+let qualityRecordOpen=false,qualityAlertStamp=null;
 let previewLog=null,previewLogPending=false,previewLogAt=0;
 let dataDraft=null;
 let branchCatalog=null,branchLoading=false,runRoots=null;const branchDrafts={};
@@ -37,6 +37,7 @@ function node(key){
  if(key==='data'){const version=document.createElement('div');version.className='release';const qc=document.createElement('div');qc.className='qc';control.append(version,qc);}
  else{const state=document.createElement('small');state.innerHTML='<span class="state-icon"></span><span class="state-label"></span>';control.append(state);}
  const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.target='_blank';link.rel='noopener';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};link.onmouseenter=hidePreview;
+ if(key==='data'){const shell=document.createElementNS('http://www.w3.org/2000/svg','svg');shell.setAttribute('viewBox','0 0 140 100');shell.setAttribute('preserveAspectRatio','none');shell.setAttribute('aria-hidden','true');shell.classList.add('database-shell');shell.innerHTML='<path class=database-body d="M1 12V87C1 103 139 103 139 87V12"/><ellipse cx=70 cy=12 rx=69 ry=11 />';el.append(shell);}
  el.append(control,link);el.onclick=()=>{selected=key;if(key==='data')dataDraft=String(data?.database_version||2023);draw();showPreview(key);};
  el.onmouseenter=()=>{clearTimeout(previewTimer);previewTimer=setTimeout(()=>showPreview(key),180);};el.onmouseleave=hidePreview;control.onfocus=()=>showPreview(key);control.onblur=hidePreview;
  $('chain').append(el);return el;
@@ -118,11 +119,13 @@ function drawQuality(){
   gate.onclick=()=>{qualityRecordOpen=true;hidePreview();$('console').hidden=false;$('logs').textContent='Hide record';$('logs').setAttribute('aria-expanded','true');showQualityRecord();};
   gate.onmouseenter=()=>showPreview('qc');gate.onmouseleave=hidePreview;gate.onfocus=()=>showPreview('qc');gate.onblur=hidePreview;$('chain').append(gate);
  }
- let submission=$('submission-node');if(!submission){submission=document.createElement('button');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.textContent='Data submission';submission.onclick=()=>{selected='data';dataDraft='new';draw();};$('chain').append(submission);}
+ let submission=$('submission-node');if(!submission){submission=document.createElement('button');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.innerHTML='<strong>Data submission</strong><small hidden>! Correction needed</small>';submission.onclick=()=>{selected='data';dataDraft='new';draw();};$('chain').append(submission);}
  submission.classList.toggle('selected',selected==='data'&&(!dataDraft||dataDraft==='new'));
  node('data').classList.toggle('selected',selected==='data'&&dataDraft!=='new');
- const state=qualityStatus();gate.className='quality-gate '+state;gate.querySelector('small').textContent={completed:'✓ Pass',failed:'× Fail',running:'Check…',waiting:'Ready'}[state];
- gate.style.transform='translateY(-66px)';
+ const state=qualityStatus();submission.classList.toggle('needs-correction',state==='failed');submission.querySelector('small').hidden=state!=='failed';
+ const stamp=data?.data_intake?.checked_at;if(state==='failed'&&stamp&&stamp!==qualityAlertStamp){qualityAlertStamp=stamp;notice('QC returned the submission: '+(data.data_intake.quality_check.errors?.[0]?.message||'Correct the flagged records.')+' Select Data submission to resubmit.');}
+ gate.className='quality-gate '+state;gate.querySelector('small').textContent={completed:'✓ Pass',failed:'× Fail',running:'Check…',waiting:'Ready'}[state];
+ gate.style.transform='translateY(-75px)';
  gate.setAttribute('aria-label','Quality check: '+{completed:'passed',failed:'failed',running:'checking',waiting:'ready'}[state]+'. View checks.');
 }
 function showQualityRecord(){
@@ -133,7 +136,7 @@ function showQualityRecord(){
 function links(){
  const root=$('chain');root.querySelector('.edges')?.remove();if(!data)return;
  const impact=affected(),rect=root.getBoundingClientRect(),ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
- const failedQC=qualityStatus()==='failed'&&selected==='data';
+ const failedQC=qualityStatus()==='failed',failedIntake=failedQC&&(!selected||(selected==='data'&&(!dataDraft||dataDraft==='new')));
  if(selected==='data'){impact.add('data');if(!dataDraft||dataDraft==='new'){impact.add('submission');impact.add('qc');}}
  const stages=new Map(data.stages.map(s=>[s.key,s]));stages.set('qc',{status:qualityStatus()});
  svg.classList.add('edges');svg.setAttribute('viewBox',`0 0 ${rect.width} ${rect.height}`);
@@ -146,7 +149,7 @@ function links(){
  for(const child of all)for(const parent of child.parents||[]){
   const a=root.querySelector(`[data-key="${parent}"]`)?.getBoundingClientRect(),b=root.querySelector(`[data-key="${child.key}"]`)?.getBoundingClientRect();if(!a||!b)continue;
   const inPath=impact.has(child.key)&&impact.has(parent),reusedInput=child.reused||stages.get(parent)?.reused;
-  const muted=(selected?!inPath:!!reusedInput)||(failedQC&&child.key!=='qc');
+  const muted=(selected?!inPath:!!reusedInput)||(failedIntake&&child.key!=='qc');
   let x=a.right-rect.left+1,y=a.top+a.height/2-rect.top,X=b.left-rect.left-4,Y=b.top+b.height/2-rect.top,points;
   const path=document.createElementNS(ns,'path');path.dataset.from=parent;path.dataset.to=child.key;
   if(parent==='submission'||parent==='qc'){
@@ -173,6 +176,10 @@ function links(){
   if(!blocked)path.setAttribute('marker-end','url(#arrow-'+(muted?'muted':running?'active':selected&&inPath?'selected':'base')+')');
   svg.append(path);
  }
+ if(failedQC){
+  const a=$('quality-gate').getBoundingClientRect(),b=$('submission-node').getBoundingClientRect(),x=a.right-rect.left+1,y=a.top+a.height/2-rect.top,X=b.right-rect.left+4,Y=b.top+b.height/2-rect.top,rail=X+12;
+  const returned=document.createElementNS(ns,'path');returned.classList.add('return-edge');returned.dataset.from='qc';returned.dataset.to='submission';returned.setAttribute('d',roundedRoute([[x,y],[rail,y],[rail,Y],[X,Y]]));returned.setAttribute('marker-end','url(#arrow-failed)');svg.append(returned);
+ }
  root.append(svg);
 }
 new ResizeObserver(()=>requestAnimationFrame(()=>{links();if(previewKey)showPreview(previewKey);if($('sql-view').open)placePopup($('sql-view'),node('extract'));})).observe($('chain'));
@@ -192,7 +199,8 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  if(key==='data'){const choices=[...(data.data_versions||[2023]).map(v=>[String(v),'Release '+v]),['new',Number(data.latest_database_version)>=2024?'Replay new-data update':'Add checked batch']];const signature=JSON.stringify(choices);if($('data-version').dataset.choices!==signature){$('data-version').replaceChildren(...choices.map(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;return option;}));$('data-version').dataset.choices=signature;}$('data-version').value=dataDraft||'new';}
  $('sql-button').hidden=key!=='extract';$('sql-button').disabled=!nextSource('extract');
  drawBranches(key,busy);
- $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?(replayData?'Replay data update →':'Add data + run →'):pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&dataDraft&&dataDraft!=='new'){$('selection-title').textContent='Data release '+dataDraft;$('progress').textContent='Restore this snapshot → 11 stages run';$('run').textContent=busy?'Starting…':'Run with v'+dataDraft+' →';}
+ $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?(replayData?'Replay data update →':'Add data + run →'):pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()==='failed'&&!busy){$('selection-title').textContent='Correct and resubmit';$('run').textContent='Resubmit + run →';}
+ if(key==='data'&&dataDraft&&dataDraft!=='new'){$('selection-title').textContent='Data release '+dataDraft;$('progress').textContent='Restore this snapshot → 11 stages run';$('run').textContent=busy?'Starting…':'Run with v'+dataDraft+' →';}
  $('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||dataDraft!=='new'||!data.database_connected;$('invalid').disabled=busy||!!stale;
  $('record-dot').className=$('live-dot').className;$('verified').textContent=time(data.source?.last_success);$('message').className='';
  $('message').textContent=sending?(changeKind==='data'?'Validate and publish incoming data…':'Commit the selected update…'):expected?'Update stored → waiting for the next GitHub run':stale?'Connection interrupted · showing the last verified run':active?'Running on GitHub · '+(data.stages.filter(s=>s.status==='running').map(s=>names[s.key]).join(' + ')||friendlyStep(active.name)):data.status==='completed'?(data.conclusion==='success'?'✓ Outputs saved · report ready':'GitHub run '+data.conclusion):'GitHub is assigning a runner…';

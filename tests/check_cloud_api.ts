@@ -20,6 +20,7 @@ Deno.test('Unconfigured cloud cannot publish; paths, fields and request identiti
  equal((await handle(new Request(endpoint+'/api/output?job=1-1-extract&file=secret'))).status,400);
  for(const job of ['1-1-private','1-1-../report','baseline-extract'])equal((await handle(new Request(endpoint+'/api/outputs?job='+encodeURIComponent(job)))).status,400);
  equal((await handle(new Request(endpoint+'/api/output?job=1-1-cpue_vessel&file=report.html'))).status,400);
+ for(const query of ['version=2025','version=2024&version=2023','table=private','version=main'])equal((await handle(new Request(endpoint+'/api/database?'+query))).status,400);
  const cors=await handle(new Request(endpoint+'/api/update',{method:'OPTIONS',headers:{Origin:'null'}}));equal(cors.status,204);equal(cors.headers.get('access-control-allow-origin'),'*');
 });
 Deno.test('Real skipped steps are reuse only after successful verified restore; dependencies wait',()=>{

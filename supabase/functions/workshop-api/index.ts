@@ -33,6 +33,16 @@ export async function handle(request:Request){
    if(path==='/api/presentation-info')return reply({presentation:'cpue-workshop',hosted:true,enabled:enabled()});
    if(path==='/api/status')return reply(await status());
    if(path==='/api/branches')return reply(await cached('branches',10,branches));
+   if(path==='/api/database'){
+    const raw=u.searchParams.get('version');
+    if([...u.searchParams.keys()].some(k=>k!=='version')||u.searchParams.getAll('version').length>1||(raw!==null&&!['2023','2024'].includes(raw)))return reply({detail:'Choose the baseline or the one added demonstration batch.'},400);
+    const latest=await cached('database:current',10,()=>rpc('cpue_snapshot',{p_version:null}));
+    const version=raw?Number(raw):latest.version;
+    if(version>latest.version)return reply({detail:'This demonstration release has expired. Open the current database or use the snapshot saved in its report.'},404);
+    const snapshot=version===latest.version?latest:await cached('database:'+version,3600,()=>rpc('cpue_snapshot',{p_version:version}));
+    return reply({provider:'Supabase · PostgreSQL',current_version:latest.version,snapshot});
+   }
+
    if(path==='/api/console'){const s=await status();if(!s.ready)return reply({ready:false,lines:[]});return reply(await cached('console:'+s.run_id+':'+s.attempt,3600,()=>consoleLines(s)));}
    if(path==='/api/output'||path==='/api/outputs'){
     const source=u.searchParams.get('job')||'',file=u.searchParams.get('file')||'';

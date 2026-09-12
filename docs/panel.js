@@ -16,7 +16,27 @@ function affected(){
  let changed=true;while(changed){changed=false;for(const s of data.stages)if(!result.has(s.key)&&(s.parents||[]).some(p=>result.has(p))){result.add(s.key);changed=true;}}
  return result;
 }
-function node(key){let el=$('chain').querySelector(`[data-key="${key}"]`);if(el)return el;el=document.createElement('button');el.dataset.key=key;el.className=key==='data'?'data-node':'stage';const [col,start,end]=positions[key];el.style.gridColumn=col;el.style.gridRow=`${start} / ${end}`;const title=document.createElement('strong');title.textContent=names[key];el.append(title);if(key==='data'){const version=document.createElement('div');version.className='release';const qc=document.createElement('div');qc.className='qc';el.append(version,qc);}else{const state=document.createElement('small');state.innerHTML='<span class="state-icon"></span><span class="state-label"></span>';el.append(state);}el.onclick=()=>{selected=key;draw();showPreview(key);};el.onmouseenter=()=>{clearTimeout(previewTimer);previewTimer=setTimeout(()=>showPreview(key),180);};el.onmouseleave=hidePreview;el.onfocus=()=>showPreview(key);el.onblur=hidePreview;$('chain').append(el);return el;}
+function nextSource(key){return branchCatalog?.options[key]?.[branchDrafts[key]||branchCatalog?.sources[key]?.branch]||data?.stages.find(s=>s.key===key)?.code_source;}
+function sourceLink(key){
+ const link=node(key).querySelector('.source-link'),source=nextSource(key);
+ link.hidden=key!=='data'&&!source;
+ link.href=key==='data'?'https://kyuhank.github.io/cpue-actions-demo/data.html':source?'https://github.com/'+source.repository+'/tree/'+encodeURIComponent(source.branch):'#';
+ link.title=key==='data'?'Open the synthetic database':source?'Open '+source.repository+' · '+source.branch:'';
+ link.setAttribute('aria-label',link.title);
+}
+function node(key){
+ let el=$('chain').querySelector(`[data-key="${key}"]`);if(el)return el;
+ el=document.createElement('div');el.dataset.key=key;el.className=key==='data'?'data-node':'stage';
+ const [col,start,end]=positions[key];el.style.gridColumn=col;el.style.gridRow=`${start} / ${end}`;
+ const control=document.createElement('button');control.type='button';control.className='node-control';
+ const title=document.createElement('strong');title.textContent=names[key];control.append(title);
+ if(key==='data'){const version=document.createElement('div');version.className='release';const qc=document.createElement('div');qc.className='qc';control.append(version,qc);}
+ else{const state=document.createElement('small');state.innerHTML='<span class="state-icon"></span><span class="state-label"></span>';control.append(state);}
+ const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.target='_blank';link.rel='noopener';link.onclick=e=>{e.stopPropagation();hidePreview();};link.onmouseenter=hidePreview;
+ el.append(control,link);el.onclick=()=>{selected=key;draw();showPreview(key);};
+ el.onmouseenter=()=>{clearTimeout(previewTimer);previewTimer=setTimeout(()=>showPreview(key),180);};el.onmouseleave=hidePreview;control.onfocus=()=>showPreview(key);control.onblur=hidePreview;
+ $('chain').append(el);return el;
+}
 function qualityRecord(){const q=data?.data_intake?.quality_check;if(!q)return [];const stamp=time(data.data_intake.checked_at?data.data_intake.checked_at*1000:null),lines=[(stamp?stamp+'  ':'')+'CHECK  incoming release '+q.proposed_version+' · '+q.rows_received+' records'];for(const e of q.errors||[]){lines.push('FAIL  '+e.code+' · '+e.message);if(e.failed_records)lines.push('      '+e.failed_records+' record(s) failed');for(const example of e.examples||[])lines.push('      '+example.set_id+' · '+(e.field||'value')+' = '+JSON.stringify(example.observed));}if(q.accepted)lines.push('PASS  '+(q.checks||[]).join(' · '));lines.push(q.accepted?'ACCEPT  validated records may be published':'RETURN  correct the data and resubmit · no release or analysis run');if(q.rule_version)lines.push('RULES  v'+q.rule_version+' · '+(q.rules_sha256||'').slice(0,12));return lines;}
 function hidePreview(){clearTimeout(previewTimer);previewKey=null;$('preview').hidden=true;}
 function showPreview(key){if(!data||sending)return;previewKey=key;const s=data.stages.find(s=>s.key===key),steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),step=s?steps.find(x=>x.number===s._step_number):null;
@@ -72,11 +92,13 @@ async function loadConsole(){if(data.has_run===false||consolePending||data.statu
 function notice(text){$('notice-text').textContent=text;$('notice').hidden=false;}
 function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),active=steps.find(s=>s.status==='in_progress'),reused=data.stages.filter(s=>s.reused).length,busy=sending||!!expected||data.status!=='completed',stale=data.source?.stale,cloudBlocked=data.session&&!data.session.can_update;
  $('run-link').textContent=data.has_run===false?'Ready':'Run #'+data.number;$('run-link').href=data.run_url;$('run-state').textContent=data.demo?.phase==='cleaning'?'Resetting…':data.has_run===false?'Ready for a fresh demonstration':stale?'Last verified state':expected?'New run pending':data.status==='completed'?(data.conclusion==='success'?'Complete · '+(data.stages.length-reused)+' run · '+reused+' reused':data.conclusion):data.stages.filter(s=>s.status==='running').length>1?data.stages.filter(s=>s.status==='running').length+' analyses running in parallel':data.status.replaceAll('_',' ');$('live-dot').className='dot '+(busy?'live':data.conclusion==='success'?'success':'');
- const source=node('data');source.classList.toggle('selected',selected==='data');source.setAttribute('aria-pressed',String(selected==='data'));const qc=data.data_intake?.quality_check,version=data.database_version||(data.data_intake?.published?qc?.proposed_version:null);source.querySelector('.release').textContent=version?'v'+version:'Versioned data';source.querySelector('.qc').textContent=sending&&changeKind==='data'?'Checking QC…':qc?(qc.accepted?'✓ QC passed':'× QC failed'):'QC before release';if(Number(version)>=2024&&(!qc||qc.accepted))source.querySelector('.qc').textContent='✓ One added batch';source.querySelector('.qc').classList.toggle('failed',!!qc&&!qc.accepted);
- for(const s of data.stages){const el=node(s.key),state=expected?(impact.has(s.key)||!selected?'waiting':s.status):s.status;el.className='stage '+state+(s.reused&&!expected?' reused':'')+(selected&&impact.has(s.key)?' impacted':'')+(selected&&!impact.has(s.key)?' outside-impact':'')+(selected===s.key?' selected':'');el.querySelector('.state-icon').textContent=s.reused&&!expected?'↺':icons[state]||'·';el.querySelector('.state-label').textContent=s.reused&&!expected?'Reused':states[state]||state;el.setAttribute('aria-pressed',String(selected===s.key));el.title=(s.parents.length?'Inputs: '+s.parents.map(p=>names[p]).join(' + '):'Input: accepted database release')+' · select to update downstream';}
+ const source=node('data');source.classList.toggle('selected',selected==='data');source.querySelector('.node-control').setAttribute('aria-pressed',String(selected==='data'));const qc=data.data_intake?.quality_check,version=data.database_version||(data.data_intake?.published?qc?.proposed_version:null);source.querySelector('.release').textContent=version?'v'+version:'Versioned data';source.querySelector('.qc').textContent=sending&&changeKind==='data'?'Checking QC…':qc?(qc.accepted?'✓ QC passed':'× QC failed'):'QC before release';if(Number(version)>=2024&&(!qc||qc.accepted))source.querySelector('.qc').textContent='✓ One added batch';source.querySelector('.qc').classList.toggle('failed',!!qc&&!qc.accepted);
+ for(const s of data.stages){const el=node(s.key),state=expected?(impact.has(s.key)||!selected?'waiting':s.status):s.status;el.className='stage '+state+(s.reused&&!expected?' reused':'')+(selected&&impact.has(s.key)?' impacted':'')+(selected&&!impact.has(s.key)?' outside-impact':'')+(selected===s.key?' selected':'');el.querySelector('.state-icon').textContent=s.reused&&!expected?'↺':icons[state]||'·';el.querySelector('.state-label').textContent=s.reused&&!expected?'Reused':states[state]||state;el.querySelector('.node-control').setAttribute('aria-pressed',String(selected===s.key));el.title=(s.parents.length?'Inputs: '+s.parents.map(p=>names[p]).join(' + '):'Input: accepted database release')+' · select to update downstream';}
  const count=selected?impact.size:data.stages.length,pendingCount=new Set([key,...Object.keys(pendingBranches())]).size,replayData=key==='data'&&Number(data.database_version)>=2024;
  $('selection-title').textContent=key==='data'?(replayData?'Replay data update':'New data'):names[key]+(key.startsWith('prepare_')||key.startsWith('assessment_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
  $('progress').textContent=(data.has_run===false&&!data.baseline_available&&key!=='data'?'Prepare initial inputs → ':key==='data'?(replayData?'Replay the accepted data update → ':'Add one batch → QC → '):pendingCount>1?pendingCount+' starting stages → ':'Run this stage → ')+count+' stages run'+(count<data.stages.length?' · '+(data.stages.length-count)+' kept':'');
+ for(const item of ['data',...data.stages.map(s=>s.key)])sourceLink(item);
+ $('sql-button').hidden=key!=='extract';
  drawBranches(key,busy);
  $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?(replayData?'Replay data update →':'Add data + run →'):pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';$('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||!data.database_connected;$('invalid').disabled=busy||!!stale;
  $('record-dot').className=$('live-dot').className;$('verified').textContent=time(data.source?.last_success);$('message').className='';
@@ -115,6 +137,19 @@ async function publish(invalid=false){
   if(result.published===false){$('console').hidden=false;$('logs').setAttribute('aria-expanded','true');$('logs').textContent='Hide record';}
  }catch(e){notice(e.message);}finally{sending=false;draw();await refresh(true);}
 }
+$('sql-close').onclick=()=>$('sql-view').close();
+$('sql-button').onclick=async()=>{
+ hidePreview();const source=nextSource('extract');if(!source||source.repository!=='kyuhank/cpue-demo-extract'||!/^[a-f0-9]{40}$/.test(source.commit))return;
+ $('sql-view').showModal();$('sql-source').textContent=source.repository+' · '+source.branch+' @ '+source.commit.slice(0,8);$('sql-content').textContent='Loading the recorded source…';
+ try{
+  const blocks=await Promise.all(['extract.sql','extract-catch.sql'].map(async(name)=>{
+   const response=await fetch('https://raw.githubusercontent.com/'+source.repository+'/'+source.commit+'/'+name,{signal:AbortSignal.timeout(12000)});
+   if(!response.ok)throw Error('SQL source is unavailable.');const text=await response.text();if(text.length>16000)throw Error('SQL source exceeds the demo limit.');
+   const section=document.createElement('section'),heading=document.createElement('h3'),link=document.createElement('a'),pre=document.createElement('pre');
+   link.textContent=name+' ↗';link.href='https://github.com/'+source.repository+'/blob/'+source.commit+'/'+name;link.target='_blank';link.rel='noopener';heading.append(link);pre.textContent=text;section.append(heading,pre);return section;
+  }));$('sql-content').replaceChildren(...blocks);
+ }catch(error){$('sql-content').textContent=error.message;}
+};
 $('run').onclick=()=>publish();$('invalid').onclick=()=>publish(true);$('logs').onclick=()=>{$('console').hidden=!$('console').hidden;$('logs').setAttribute('aria-expanded',String(!$('console').hidden));$('logs').textContent=$('console').hidden?'Show record':'Hide record';showConsole();};$('dismiss').onclick=()=>{$('notice').hidden=true;};
 if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');refresh();loadBranches();setInterval(refresh,2000);
 async function heartbeat(){try{const r=await fetch('/api/presentation-info',{cache:'no-store'});if(r.ok&&(await r.json()).presentation==='cpue-workshop'&&parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');}catch{}}

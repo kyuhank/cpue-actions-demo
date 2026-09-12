@@ -32,7 +32,7 @@
   "report": {
     "repository": "kyuhank/cpue-demo-report",
     "branch": "main",
-    "commit": "7c9e6762c27d8288395e90fd090d0fe97070ef4e"
+    "commit": "1d96209b6209066c6da8ac3cc021ce1f06a50b57"
   },
   "assessment_vessel_ref": {
     "repository": "kyuhank/cpue-demo-assessment",

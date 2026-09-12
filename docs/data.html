@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synthetic fishery database</title><link rel="stylesheet" href="./data.css"></head>
+<body><main>
+<header><div><a class="back" href="./">← Workflow demo</a><h1>Synthetic fishery database</h1><p id="source">Connecting to Supabase…</p></div><label>Data version<select id="version" aria-label="Data version" disabled></select></label></header>
+<div class="summary"><span id="counts">Loading records…</span><span>Read only · Synthetic data</span></div>
+<div class="toolbar"><nav aria-label="Database tables"><button class="active" data-table="sets">Set records</button><button data-table="removals">Annual catch</button></nav><input id="filter" type="search" placeholder="Filter records" aria-label="Filter records"></div>
+<div id="error" role="status" hidden></div><div class="table-wrap"><table><thead id="head"></thead><tbody id="rows"></tbody></table></div>
+<footer><span id="range"></span><div><button id="previous" disabled>← Previous</button><button id="next" disabled>Next →</button></div></footer>
+<p class="note">This view reads the hosted database. One added batch is retained above the baseline; the demo resets after its viewing window.</p>
+</main><script src="./cloud.js"></script><script src="./data.js"></script></body></html>

@@ -32,7 +32,7 @@
   "report": {
     "repository": "kyuhank/cpue-demo-report",
     "branch": "main",
-    "commit": "fd28d2f68ff75dd39ca70554f431ca49bb068736"
+    "commit": "404b00783a754ed91beff8a8e1be5cb0d9a6fc90"
   },
   "assessment_vessel_ref": {
     "repository": "kyuhank/cpue-demo-assessment",
@@ -57,11 +57,11 @@
   "cpue_summary": {
     "repository": "kyuhank/cpue-demo-cpue",
     "branch": "main",
-    "commit": "224bd2de948fac7d1213f2e8b918c22b214620c0"
+    "commit": "d2ced2db121312db4b202ee4740fe7dcca78b90b"
   },
   "cpue_report": {
     "repository": "kyuhank/cpue-demo-cpue",
     "branch": "main",
-    "commit": "224bd2de948fac7d1213f2e8b918c22b214620c0"
+    "commit": "d2ced2db121312db4b202ee4740fe7dcca78b90b"
   }
 }

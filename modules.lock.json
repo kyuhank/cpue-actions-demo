@@ -27,12 +27,12 @@
   "synthesis": {
     "repository": "kyuhank/cpue-demo-synthesis",
     "branch": "main",
-    "commit": "2f0879bfe74c9d3131f38ec0fd38473582391518"
+    "commit": "a6303f91f824791349c7897fd9ce4bde0cf68feb"
   },
   "report": {
     "repository": "kyuhank/cpue-demo-report",
     "branch": "main",
-    "commit": "0815afc29e18be64c2db70fd562e81b40a2950ec"
+    "commit": "2131766db3108534c3ce9642b645ea16c2a71bb6"
   },
   "assessment_vessel_ref": {
     "repository": "kyuhank/cpue-demo-assessment",

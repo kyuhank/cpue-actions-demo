@@ -63,24 +63,24 @@
     "main": {
       "repository": "kyuhank/cpue-demo-synthesis",
       "branch": "main",
-      "commit": "2f0879bfe74c9d3131f38ec0fd38473582391518"
+      "commit": "a6303f91f824791349c7897fd9ce4bde0cf68feb"
     },
     "develop": {
       "repository": "kyuhank/cpue-demo-synthesis",
       "branch": "develop",
-      "commit": "ed3ebedf9e8fce97b81cb3b2bb02027be9274a6d"
+      "commit": "11a0dc9d2bba16fa99c3752792609b3453b813d1"
     }
   },
   "report": {
     "main": {
       "repository": "kyuhank/cpue-demo-report",
       "branch": "main",
-      "commit": "0815afc29e18be64c2db70fd562e81b40a2950ec"
+      "commit": "2131766db3108534c3ce9642b645ea16c2a71bb6"
     },
     "develop": {
       "repository": "kyuhank/cpue-demo-report",
       "branch": "develop",
-      "commit": "c5235ac95b830d5832b0876cbee1eb7b11aab0fd"
+      "commit": "7ff49fc43b5d438ba63051c9d496401ed992cf6c"
     }
   },
   "assessment_vessel_ref": {

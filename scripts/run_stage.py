@@ -46,6 +46,8 @@ if key.startswith('cpue_') and code_source.get('specification', {}).get('choice'
 started = time.perf_counter()
 started_at = datetime.now(timezone.utc).isoformat()
 runpy.run_path(str(ROOT / 'pipeline' / code_source.get('entrypoint', stage + '.py')), run_name='__main__')
+if key != 'report':
+    runpy.run_path(str(ROOT / 'pipeline/stage_html.py'))['build'](key, work / 'outputs', code_source)
 compute_seconds = time.perf_counter() - started
 record = {'stage': key, 'fingerprint': plan['stages'][key]['fingerprint'] if plan else fingerprints()[key],
           'run_id': os.getenv('GITHUB_RUN_ID', 'local'), 'attempt': os.getenv('GITHUB_RUN_ATTEMPT', '1'),

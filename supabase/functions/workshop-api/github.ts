@@ -15,7 +15,7 @@ export const definitions = [
 ] as const;
 export const changeable = new Set(definitions.map(x=>x[0]));
 export function outputNames(key:string):string[]{
- const common=['manifest.json','record.json'];
+ const common=['results.html','manifest.json','record.json'];
  if(key==='extract')return ['sets.csv','catch.csv','extract.sql','extract-catch.sql',...common];
  if(key.startsWith('cpue_'))return ['cpue.csv','cpue-diagnostics.txt','cpue-diagnostics.json',...common];
  if(key.startsWith('prepare_'))return ['assessment-input.csv','catch.csv','cpue.csv',...common];

@@ -50,7 +50,7 @@ def module_sources():
 def stage_code_digest(key, sources):
     if key not in sources:
         return code_digest()
-    common = [ROOT / 'pipeline' / name for name in ('settings.py', 'choices.json', 'assessment_cases.json', 'age_model.py')]
+    common = [ROOT / 'pipeline' / name for name in ('settings.py', 'choices.json', 'assessment_cases.json', 'age_model.py', 'stage_html.py')]
     common += [ROOT / 'scripts' / name for name in ('run_stage.py', 'workflow_plan.py')]
     shared = digest(b''.join(str(p.relative_to(ROOT)).encode() + b'\0' + p.read_bytes() for p in common))
     return digest(json.dumps({'shared': shared, 'module': {k: v for k, v in sources[key].items() if k != 'requested_revision'}}, sort_keys=True).encode())

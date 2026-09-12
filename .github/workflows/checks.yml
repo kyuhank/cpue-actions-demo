@@ -1,0 +1,24 @@
+name: Checks
+
+on:
+  push:
+    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'supabase/snapshot.py', '.github/workflows/checks.yml']
+  pull_request:
+    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'supabase/snapshot.py', '.github/workflows/checks.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  reuse:
+    name: Baseline and downstream reuse
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify intermediate starts and parallel calculations
+        run: python3 tests/check_baseline.py
+      - name: Verify dependency invalidation and provenance
+        run: python3 tests/check_incremental.py

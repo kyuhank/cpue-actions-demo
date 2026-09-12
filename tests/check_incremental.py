@@ -78,6 +78,18 @@ with tempfile.TemporaryDirectory(prefix='cpue-incremental-') as folder:
     assert report_manifest['configuration']['stage_settings']['report'] == {'revision': 1}
     assert report_manifest['workflow_plan']['run_id'] == '5'
     assert '1 stages executed · 12 reused' in (root / 'stages/report/outputs/report.html').read_text()
+    # CPUE reporting does not feed assessment. Preserve the completed assessment
+    # report, including its original provenance, when only CPUE reporting changes.
+    fifth = root / 'fifth'; (root / 'stages').rename(fifth)
+    settings['cpue_summary'] = {'revision': 1}; config.write_text(json.dumps(settings)); env['GITHUB_RUN_ID'] = '6'
+    assert execute(fifth) == {'cpue_summary', 'cpue_report'}
+    for key in ('report', 'synthesis', 'prepare_vessel', 'assessment_vessel_high_m'):
+        assert (root / 'stages' / key / 'record.json').read_bytes() == (fifth / key / 'record.json').read_bytes()
+    assert (root / 'stages/report/outputs/report.html').read_bytes() == (fifth / 'report/outputs/report.html').read_bytes()
+    assert json.loads((root / 'stages/report/outputs/manifest.json').read_text())['github_run_id'] == '5'
+    sixth = root / 'sixth'; (root / 'stages').rename(sixth)
+    settings['cpue_report'] = {'revision': 1}; config.write_text(json.dumps(settings)); env['GITHUB_RUN_ID'] = '7'
+    assert execute(sixth) == {'cpue_report'}
     third = root / 'before-data-change'; (root / 'stages').rename(third)
     import sqlite3
     with sqlite3.connect(root / 'data/toy-fishery.sqlite') as db:

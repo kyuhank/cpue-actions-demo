@@ -143,7 +143,7 @@ def plan(previous=None):
         for candidate in (previous / key, baseline / key):
             record_path = candidate / 'record.json'
             candidate_record = json.loads(record_path.read_text()) if record_path.exists() else {}
-            if (key != 'report' and candidate_record.get('fingerprint') == fingerprints_now[key]
+            if (candidate_record.get('fingerprint') == fingerprints_now[key]
                     and candidate_record.get('outputs') and candidate_record['outputs'] == hashes(candidate / 'outputs')):
                 source, record, reuse = candidate, candidate_record, True
                 break

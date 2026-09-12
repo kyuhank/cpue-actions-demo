@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='cpue-baseline-') as folder:
     target = ROOT/'baseline'; target.mkdir(exist_ok=True)
     with zipfile.ZipFile(target/'workflow.zip','w',zipfile.ZIP_DEFLATED,compresslevel=9) as archive:
         for stage in sorted((work/'stages').iterdir()):
-            if not stage.is_dir() or stage.name == 'report': continue
+            if not stage.is_dir(): continue
             for path in sorted(stage.rglob('*')):
                 if path.is_file() and (path.name=='record.json' or path.is_relative_to(stage/'outputs')):
                     archive.write(path,path.relative_to(work/'stages'))

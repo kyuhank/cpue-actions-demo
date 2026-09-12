@@ -43,6 +43,11 @@ with tempfile.TemporaryDirectory(prefix='cpue-baseline-check-') as folder:
     assert report['git_commit']=='b'*40 and report['extraction_code_commit']==metadata['code_commit']
     p=plan({'cpue_vessel':{'min_hooks':2000}})
     assert sum(v['action']=='run' for v in p['stages'].values())==8
+    p=plan({'cpue_summary':{'revision':1}})
+    assert {k for k,v in p['stages'].items() if v['action']=='run'}=={'cpue_summary','cpue_report'}
+    assert p['stages']['report']['origin_run']=='baseline-2023'
+    p=plan({'cpue_report':{'revision':1}})
+    assert {k for k,v in p['stages'].items() if v['action']=='run'}=={'cpue_report'}
     with (root/'pipeline/settings.py').open('a') as f:f.write('\n# Changed shared calculation code\n')
     p=plan({})
     assert all(v['action']=='run' for v in p['stages'].values())

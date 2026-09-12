@@ -5,6 +5,7 @@ import html
 import io
 import json
 import os
+import re
 from pathlib import Path
 
 STYLE = '''*{box-sizing:border-box}body{margin:0;background:#fafcfc;color:#082447;font:16px/1.55 Arial,sans-serif}main{max-width:1020px;margin:auto;padding:32px}h1{font:700 30px/1.2 Arial,sans-serif;margin:0 0 8px}h2{font-size:21px;margin-top:26px}p,small{color:#587181}svg{width:100%;max-height:300px}table{border-collapse:collapse;width:100%;font-size:13px}th,td{padding:9px;text-align:left;border-bottom:1px solid #dbe6ed}th{color:#537183}a{color:#0085ca}code,pre{font-size:12px;overflow-wrap:anywhere;white-space:pre-wrap}summary{cursor:pointer;color:#0085ca}details{margin-top:22px}.brief{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:24px 0}.brief>div{padding:16px;background:#eef5f8;border-radius:9px}.brief span{display:block;color:#637c89;font-size:12px;margin-bottom:6px}.brief b{font-size:16px}.result{font-size:20px;color:#123b55;background:#eaf5ef;border-left:4px solid #268665;padding:15px 18px}.sample{color:#5a7281;font-size:13px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:22px}.meta{border-bottom:1px solid #bcd9e4;padding-bottom:16px}.table{overflow:auto}.downloads{display:flex;gap:16px;flex-wrap:wrap;margin:22px 0}@media(max-width:700px){.grid,.brief{grid-template-columns:1fr}main{padding:20px}}@media print{body{background:white}main{padding:0}details{break-inside:avoid}}'''
@@ -46,6 +47,8 @@ def intake_page(key, folder, success):
 
 def table(path, limit=12):
     rows = list(csv.reader(path.open()))
+    visible = [i for i, name in enumerate(rows[0]) if name != 'log_index_SSE'] if rows else []
+    rows = [[row[i] for i in visible] for row in rows]
     cells = ''.join('<tr>' + ''.join(f'<{"th" if i == 0 else "td"}>{html.escape(v)}</{"th" if i == 0 else "td"}>' for v in row) + '</tr>' for i, row in enumerate(rows[:limit+1]))
     return '<div class="table"><table>' + cells + '</table></div><small>' + str(len(rows)-1) + ' rows' + (' · first '+str(limit)+' shown' if len(rows)>limit+1 else '') + '</small>'
 
@@ -115,11 +118,34 @@ def build(key, out, source):
     print('HTML RESULTS: '+key+' · results.html',flush=True)
 
 
+def simplify_report_tables(content):
+    """Omit the fit objective from display tables, including older module reports."""
+    def simplify(match):
+        table_html = match.group(0)
+        first_row = re.search(r'<tr\b[^>]*>(.*?)</tr>', table_html, re.S)
+        if not first_row:
+            return table_html
+        headers = re.findall(r'<th\b[^>]*>(.*?)</th>', first_row.group(1), re.S)
+        hidden = {i for i, value in enumerate(headers)
+                  if html.unescape(re.sub(r'<[^>]+>', '', value)).strip() in ('Log-index SSE', 'log_index_SSE')}
+        if not hidden:
+            return table_html
+        def row(match):
+            index = -1
+            def cell(match):
+                nonlocal index
+                index += 1
+                return '' if index in hidden else match.group(0)
+            return re.sub(r'<t[hd]\b[^>]*>.*?</t[hd]>', cell, match.group(0), flags=re.S)
+        return re.sub(r'<tr\b[^>]*>.*?</tr>', row, table_html, flags=re.S)
+    return re.sub(r'<table\b[^>]*>.*?</table>', simplify, content, flags=re.S)
+
+
 def finish_report(key, out):
     """Give both report types the same short introduction as the analysis outputs."""
     overview = ('Compared CPUE analyses', 'Describe methods and results', 'CPUE report') if key=='cpue_report' else ('Four assessed model cases', 'Summarise estimates and their sources', 'Assessment report')
     path=out/'report.html'
-    content=path.read_text()
+    content=simplify_report_tables(path.read_text())
     content=content.replace('</style>', STYLE+'</style>',1)
     content=content.replace('</h1>', '</h1>'+brief(*overview),1)
     path.write_text(content)

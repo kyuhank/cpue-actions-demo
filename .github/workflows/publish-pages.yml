@@ -1,0 +1,57 @@
+name: Publish static Pages
+
+on:
+  workflow_call:
+
+permissions: {}
+
+concurrency:
+  group: pages-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url || steps.retry.outputs.page_url }}
+    steps:
+      - name: Check out the site
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Package the static site
+        run: |
+          test -f docs/index.html
+          if [ -n "$(find docs -type l -print -quit)" ]; then
+            echo "::error::The published site must not contain symbolic links."
+            exit 1
+          fi
+          tar --directory docs --exclude='.git' --exclude='.github' --exclude='.[^/]*' -cf "$RUNNER_TEMP/artifact.tar" .
+      - name: Upload the site
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
+      - name: Deploy
+        id: deploy
+        continue-on-error: true
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
+        with:
+          timeout: 120000
+      - name: Wait before retry
+        if: steps.deploy.outcome == 'failure'
+        run: sleep 5
+      - name: Retry deployment
+        id: retry
+        if: steps.deploy.outcome == 'failure'
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5
+        with:
+          timeout: 120000

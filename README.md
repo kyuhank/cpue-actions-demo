@@ -44,3 +44,5 @@ Open `stages/report/outputs/report.html`. Requires Python and internet access fo
 Visitor outputs expire ten minutes after completion. Fixed snapshots and a baseline remain available for fresh runs. Added data are limited to one batch. Downloaded reports retain their reproduction bundle.
 
 [Hosted service and controls](supabase/README.md) · [Container source](https://github.com/PacificCommunity/ofp-sam-docker-images/tree/main/cpue-workshop)
+
+Static sites deploy only when `docs/` or their Pages workflow changes. [The shared deployment workflow](.github/workflows/publish-pages.yml) uses a single runner and retries one failed deployment.

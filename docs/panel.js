@@ -1,7 +1,7 @@
 
 const $=id=>document.getElementById(id);
-const positions={data:[1,1,5],extract:[3,1,5],cpue_vessel:[5,1,3],cpue_year:[5,3,5],prepare_vessel:[7,1,3],prepare_year:[7,3,5],assessment_vessel_ref:[9,1,2],assessment_vessel_high_m:[9,2,3],assessment_year_ref:[9,3,4],assessment_year_high_m:[9,4,5],synthesis:[11,1,5],report:[13,1,5]};
-const names={data:'Database',extract:'Extract',cpue_vessel:'CPUE A',cpue_year:'CPUE B',prepare_vessel:'Input prep',prepare_year:'Input prep',assessment_vessel_ref:'Assessment 1',assessment_vessel_high_m:'Assessment 2',assessment_year_ref:'Assessment 1',assessment_year_high_m:'Assessment 2',synthesis:'Synthesis',report:'Report'};
+const positions={cpue_summary:[7,1,5],cpue_report:[7,1,5],data:[1,1,5],extract:[3,1,5],cpue_vessel:[5,1,3],cpue_year:[5,3,5],prepare_vessel:[9,1,3],prepare_year:[9,3,5],assessment_vessel_ref:[11,1,2],assessment_vessel_high_m:[11,2,3],assessment_year_ref:[11,3,4],assessment_year_high_m:[11,4,5],synthesis:[13,1,5],report:[15,1,5]};
+const names={submission:'Data submission',qc:'QC',ingest:'Prepare & load',cpue_summary:'Results summary',cpue_report:'CPUE report',data:'Database',extract:'Extract',cpue_vessel:'CPUE analysis A',cpue_year:'CPUE analysis B',prepare_vessel:'Input prep',prepare_year:'Input prep',assessment_vessel_ref:'Assessment 1',assessment_vessel_high_m:'Assessment 2',assessment_year_ref:'Assessment 1',assessment_year_high_m:'Assessment 2',synthesis:'Results summary',report:'Assessment report'};
 const states={waiting:'Waiting',queued:'Queued',idle:'Queued',running:'Running',completed:'Complete',failed:'Failed',blocked:'Blocked',cancelled:'Cancelled'},icons={completed:'✓',running:'◌',failed:'×',blocked:'×',cancelled:'–'};
 let qualityRecordOpen=false,qualityAlertStamp=null;
 let previewLog=null,previewLogPending=false,previewLogAt=0;
@@ -36,17 +36,27 @@ function sourceLink(key){
 }
 function node(key){
  let el=$('chain').querySelector(`[data-key="${key}"]`);if(el)return el;
- el=document.createElement('div');el.dataset.key=key;el.className=key==='data'?'data-node':'stage';
+ el=document.createElement('div');el.dataset.key=key;if(['cpue_summary','cpue_report'].includes(key))el.id=key;el.className=key==='data'?'data-node':'stage';
  const [col,start,end]=positions[key];el.style.gridColumn=col;el.style.gridRow=`${start} / ${end}`;
  const control=document.createElement('button');control.type='button';control.className='node-control';
- const title=document.createElement('strong');title.textContent=names[key];control.append(title);
+ const title=document.createElement('strong');title.textContent=['cpue_vessel','cpue_year'].includes(key)?'CPUE analysis':names[key];control.append(title);
  if(key==='data'){const version=document.createElement('div');version.className='release';const qc=document.createElement('div');qc.className='qc';control.append(version,qc);}
- else{const state=document.createElement('small');state.innerHTML='<span class="state-icon"></span><span class="state-label"></span>';control.append(state);}
+ else{const state=document.createElement('small');state.innerHTML='<span class="state-icon"></span><span class="state-label"></span>';if(['cpue_vessel','cpue_year'].includes(key)){const variant=document.createElement('span');variant.className='analysis-variant';variant.textContent=key==='cpue_vessel'?'A':'B';state.prepend(variant);}control.append(state);if(key==='synthesis'){const output=document.createElement('span');output.className='output-note';output.textContent='Plots + tables';control.append(output);}}
  const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.target='_blank';link.rel='noopener';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};link.onmouseenter=hidePreview;
- if(key==='data'){const shell=document.createElementNS('http://www.w3.org/2000/svg','svg');shell.setAttribute('viewBox','0 0 140 100');shell.setAttribute('preserveAspectRatio','none');shell.setAttribute('aria-hidden','true');shell.classList.add('database-shell');shell.innerHTML='<path class=database-body d="M1 12V87C1 103 139 103 139 87V12"/><ellipse cx=70 cy=12 rx=69 ry=11 />';el.append(shell);}
+ if(key==='data'){const shell=document.createElementNS('http://www.w3.org/2000/svg','svg');shell.setAttribute('viewBox','0 0 140 100');shell.setAttribute('preserveAspectRatio','none');shell.setAttribute('aria-hidden','true');shell.classList.add('database-shell');shell.innerHTML='<path class=database-body d="M1 12V87C1 103 139 103 139 87V12"/><ellipse cx=70 cy=12 rx=69 ry=11 /><path class=record-lines d="M38 76H112M38 84H112M38 92H112M65 73V95M88 73V95"/><path class=record-keys d="M27 74h5v4h-5zM27 82h5v4h-5zM27 90h5v4h-5z"/>';el.append(shell);}
  el.append(control,link);el.onclick=()=>{selected=key;if(key==='data')dataDraft=String(data?.database_version||2023);draw();showPreview(key);};
  el.onmouseenter=()=>{clearTimeout(previewTimer);previewTimer=setTimeout(()=>showPreview(key),180);};el.onmouseleave=hidePreview;control.onfocus=()=>showPreview(key);control.onblur=hidePreview;
  $('chain').append(el);return el;
+}
+function drawCpueProducts(){}
+const escapeHTML=value=>String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+async function openCpueOutput(kind){
+ const stage=data?.stages.find(s=>s.key==='cpue_'+kind);if(!stage?.source_id||stage.status!=='completed')return;
+ hidePreview();const ticket=++sourceTicket;$('source-title').textContent=names[stage.key];
+ $('source-meta').textContent='Actual GitHub job output · Run #'+data.number;$('source-body').textContent='Loading…';$('source-view').showModal();
+ try{const response=await fetch('/api/output?job='+encodeURIComponent(stage.source_id)+'&file='+(kind==='report'?'report.html':'results.html'));if(!response.ok)throw Error('This output is still being published or has expired.');const html=await response.text();if(ticket!==sourceTicket)return;
+ const frame=document.createElement('iframe');frame.title=names[stage.key];frame.setAttribute('sandbox','allow-downloads');frame.srcdoc=html;$('source-body').replaceChildren(frame);
+ }catch(e){if(ticket===sourceTicket)$('source-body').textContent=e.message;}
 }
 function qualityRecord(){const q=data?.data_intake?.quality_check;if(!q)return [];const stamp=time(data.data_intake.checked_at?data.data_intake.checked_at*1000:null),lines=[(stamp?stamp+'  ':'')+'CHECK  incoming release '+q.proposed_version+' · '+q.rows_received+' records'];for(const e of q.errors||[]){lines.push('FAIL  '+e.code+' · '+e.message);if(e.failed_records)lines.push('      '+e.failed_records+' record(s) failed');for(const example of e.examples||[])lines.push('      '+example.set_id+' · '+(e.field||'value')+' = '+JSON.stringify(example.observed));}if(q.accepted)lines.push('PASS  '+(q.checks||[]).join(' · '));lines.push(q.accepted?'ACCEPT  validated records may be published':'RETURN  correct the data and resubmit · no release or analysis run');if(q.rule_version)lines.push('RULES  v'+q.rule_version+' · '+(q.rules_sha256||'').slice(0,12));return lines;}
 function hidePreview(){clearTimeout(previewTimer);previewKey=null;$('preview').hidden=true;}
@@ -83,14 +93,14 @@ function placePopup(box,element){
 
 function showPreview(key){
  if(!data||sending||$('sql-view').open||$('branch-view').open||$('source-view').open)return;previewKey=key;
- const stage=data.stages.find(s=>s.key===key);
+ const stage=[...data.stages,...(data.intake_stages||[])].find(s=>s.key===key);
  $('preview-title').textContent=(key==='qc'?'Quality check':names[key])+(key.startsWith('assessment_')||key.startsWith('prepare_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
  let lines=[];
- if(key==='data'||key==='qc'){
+ if(key==='data'||(!stage&&key==='qc')){
   const q=data.data_intake?.quality_check;$('preview-state').textContent=q&&!q.accepted?'QC failed':'Database · v'+(data.database_version||2023);
   lines=q&&!q.accepted?qualityRecord().filter(x=>x.startsWith('FAIL')||x.startsWith('RETURN')).slice(0,3):key==='qc'?(q?['PASS  '+(q.checks||[]).slice(0,3).join(' · '),'Accepted release → extraction may start.']:['Check fields, duplicates, effort and catch.','Reject invalid data before publication.']):['Select a saved release, or add one checked batch.'];
-  if(key==='qc')$('preview-state').textContent=qualityStatus()==='failed'?'Rejected · no new workflow':qualityStatus()==='completed'?'Passed · before extraction':'Before extraction';
- }else{
+  if(key==='qc')$('preview-state').textContent=qualityStatus()==='failed'?'Failed · GitHub job':qualityStatus()==='completed'?'Passed · before extraction':'Before extraction';
+ }else if(stage){
   $('preview-state').textContent=(stage.reused?'Reused':states[stage.status]||stage.status)+(data.has_run?' · GitHub #'+data.number:'');
   const record=previewLog?.run_id===data.run_id&&previewLog?.stage===key?previewLog:null;
   if(record?.lines.length){lines=record.lines.slice(-3);$('preview-state').textContent=record.source+' · '+(stage.reused?'Reused':states[stage.status]||stage.status);}
@@ -116,6 +126,7 @@ function roundedRoute(points,radius=6){
  return d+`L${clean.at(-1).join(',')}`;
 }
 function qualityStatus(){
+ const actual=data?.intake_stages?.find(j=>j.key==='qc');if(actual&&!actual.skipped)return actual.status;
  const q=data?.data_intake?.quality_check;
  return sending&&changeKind==='data'?'running':q?(q.accepted?'completed':'failed'):'waiting';
 }
@@ -125,13 +136,21 @@ function drawQuality(){
   gate.onclick=()=>{qualityRecordOpen=true;hidePreview();$('console').hidden=false;$('logs').textContent='Hide record';$('logs').setAttribute('aria-expanded','true');showQualityRecord();};
   gate.onmouseenter=()=>showPreview('qc');gate.onmouseleave=hidePreview;gate.onfocus=()=>showPreview('qc');gate.onblur=hidePreview;$('chain').append(gate);
  }
- let submission=$('submission-node');if(!submission){submission=document.createElement('button');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.innerHTML='<strong>Data submission</strong><small hidden>! Correction needed</small>';submission.onclick=()=>{selected='data';dataDraft='new';draw();};$('chain').append(submission);}
+ let submission=$('submission-node');if(!submission){submission=document.createElement('button');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.innerHTML='<strong>Data submission</strong><span class="submission-owner">Owner · Korea</span><small hidden>! Correction needed</small>';submission.onclick=()=>{selected='data';dataDraft='new';draw();};$('chain').append(submission);}
  submission.classList.toggle('selected',selected==='data'&&(!dataDraft||dataDraft==='new'));
  node('data').classList.toggle('selected',selected==='data'&&dataDraft!=='new');
- const state=qualityStatus();submission.classList.toggle('needs-correction',state==='failed');submission.querySelector('small').hidden=state!=='failed';
+ let ingest=$('ingest-node');if(!ingest){ingest=document.createElement('button');ingest.id='ingest-node';ingest.dataset.key='ingest';ingest.textContent='Prepare & load';ingest.title='Owner · Jessica, Tiffany. Align fields, formats and units; load accepted records into the database.';$('chain').append(ingest);}
+ for(const [key,el] of [['submission',submission],['qc',gate],['ingest',ingest]]){el.onmouseenter=()=>showPreview(key);el.onmouseleave=hidePreview;}
+ const actualIngest=data.intake_stages?.find(j=>j.key==='ingest');
+ const actualSubmission=data.intake_stages?.find(j=>j.key==='submission');
+ submission.dataset.status=actualSubmission?.status||'waiting';submission.querySelector('.submission-owner').textContent=(actualSubmission&&!actualSubmission.skipped?(icons[actualSubmission.status]||'·')+' ':'')+'Owner · Korea';submission.classList.toggle('running',actualSubmission?.status==='running');
+ ingest.onclick=()=>{selected='data';dataDraft='new';draw();showPreview('ingest');};
+ ingest.textContent=(actualIngest&&!actualIngest.skipped?(icons[actualIngest.status]||'·')+' ':'')+'Prepare & load';
+ const state=qualityStatus();ingest.className='ingest-node '+(actualIngest?.status||(state==='failed'?'blocked':state==='completed'&&data.data_intake?.published?'completed':'waiting'));submission.classList.toggle('needs-correction',state==='failed');submission.querySelector('small').hidden=state!=='failed';
  const stamp=data?.data_intake?.checked_at;if(state==='failed'&&stamp&&stamp!==qualityAlertStamp){qualityAlertStamp=stamp;notice('QC returned the submission: '+(data.data_intake.quality_check.errors?.[0]?.message||'Correct the flagged records.')+' Select Data submission to resubmit.');}
  gate.className='quality-gate '+state;gate.querySelector('small').textContent={completed:'✓ Pass',failed:'× Fail',running:'Check…',waiting:'Ready'}[state];
- gate.style.transform='translateY(-75px)';
+ gate.style.transform='translateY(-83px)';
+ gate.title='Owner · Jessica, Tiffany';
  gate.setAttribute('aria-label','Quality check: '+{completed:'passed',failed:'failed',running:'checking',waiting:'ready'}[state]+'. View checks.');
 }
 function showQualityRecord(){
@@ -143,7 +162,7 @@ function links(){
  const root=$('chain');root.querySelector('.edges')?.remove();if(!data)return;
  const impact=affected(),rect=root.getBoundingClientRect(),ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
  const failedQC=qualityStatus()==='failed',failedIntake=failedQC&&(!selected||(selected==='data'&&(!dataDraft||dataDraft==='new')));
- if(selected==='data'){impact.add('data');if(!dataDraft||dataDraft==='new'){impact.add('submission');impact.add('qc');}}
+ if(selected==='data'){impact.add('data');if(!dataDraft||dataDraft==='new'){impact.add('submission');impact.add('qc');impact.add('ingest');}}
  const stages=new Map(data.stages.map(s=>[s.key,s]));stages.set('qc',{status:qualityStatus()});
  svg.classList.add('edges');svg.setAttribute('viewBox',`0 0 ${rect.width} ${rect.height}`);
  const defs=document.createElementNS(ns,'defs');
@@ -151,14 +170,19 @@ function links(){
   const marker=document.createElementNS(ns,'marker');for(const [name,value] of Object.entries({id:'arrow-'+id,viewBox:'0 0 7 7',refX:'6',refY:'3.5',markerWidth:'7',markerHeight:'7',markerUnits:'userSpaceOnUse',orient:'auto'}))marker.setAttribute(name,value);
   const head=document.createElementNS(ns,'path');head.setAttribute('d','M0 0L6 3.5L0 7Z');head.setAttribute('style','fill:'+color+';stroke:none');marker.append(head);defs.append(marker);
  }svg.append(defs);
- const all=[{key:'qc',parents:['submission'],status:qualityStatus()},{key:'data',parents:['qc']},...data.stages.map(s=>s.key==='extract'?{...s,parents:['data']}:s)];
- for(const child of all)for(const parent of child.parents||[]){
+ for(const [first,last,fill,stroke] of [['data','extract','#edf7ee','#b4d5b8'],['cpue_vessel','cpue_report','#ebf5fc','#aacfe8'],['prepare_vessel','report','#f4effa','#cfbce0']]){
+  const a=node(first).getBoundingClientRect(),b=(last==='cpue_report'?$(last):node(last))?.getBoundingClientRect();if(!b)continue;
+  const band=document.createElementNS(ns,'rect');band.dataset.module=first;for(const [k,v] of Object.entries({x:a.left-rect.left-4,y:-17,width:b.right-a.left+8,height:rect.height+29,rx:9,fill,stroke,'stroke-width':1}))band.setAttribute(k,v);svg.append(band);
+ }
+
+ const all=[{key:'qc',parents:['submission'],status:qualityStatus()},{key:'ingest',parents:['qc']},{key:'data',parents:['ingest']},...data.stages.map(s=>s.key==='extract'?{...s,parents:['data']}:s)];
+ for(const child of all.filter(s=>!['cpue_summary','cpue_report'].includes(s.key)))for(const parent of child.parents||[]){
   const a=root.querySelector(`[data-key="${parent}"]`)?.getBoundingClientRect(),b=root.querySelector(`[data-key="${child.key}"]`)?.getBoundingClientRect();if(!a||!b)continue;
   const inPath=impact.has(child.key)&&impact.has(parent),reusedInput=child.reused||stages.get(parent)?.reused;
   const muted=(selected?!inPath:!!reusedInput)||(failedIntake&&child.key!=='qc');
   let x=a.right-rect.left+1,y=a.top+a.height/2-rect.top,X=b.left-rect.left-4,Y=b.top+b.height/2-rect.top,points;
   const path=document.createElementNS(ns,'path');path.dataset.from=parent;path.dataset.to=child.key;
-  if(parent==='submission'||parent==='qc'){
+  if(parent==='submission'||parent==='qc'||parent==='ingest'){
    x=a.left+a.width/2-rect.left;y=a.bottom-rect.top+1;X=b.left+b.width/2-rect.left;Y=b.top-rect.top-4;points=[[x,y],[X,Y]];
   }else if(parent==='extract'&&child.key.startsWith('prepare_')){
    const top=child.key==='prepare_vessel',rail=top?-4:rect.height+4;
@@ -182,6 +206,16 @@ function links(){
   if(!blocked)path.setAttribute('marker-end','url(#arrow-'+(muted?'muted':running?'active':selected&&inPath?'selected':'base')+')');
   svg.append(path);
  }
+ const combinedAffected=impact.has('cpue_summary')||impact.has('cpue_report');
+ for(const [from,to] of [['cpue_vessel','cpue_summary'],['cpue_year','cpue_summary'],['cpue_summary','cpue_report']]){
+  const isAnalysis=from!=='cpue_summary',source=isAnalysis?node(from):$(from),target=$(to);if(!source||!target)continue;
+  const muted=(selected?!(impact.has(from)&&impact.has(to)):isAnalysis?!!stages.get(from)?.reused:['cpue_vessel','cpue_year'].every(k=>stages.get(k)?.reused))||failedIntake;
+  const a=source.getBoundingClientRect(),b=target.getBoundingClientRect();let points;
+  if(isAnalysis){const top=from==='cpue_vessel',x=a.right-rect.left+1,y=(top?a.bottom-9:a.top+9)-rect.top,X=b.left-rect.left-4,Y=b.top+b.height*(top?.35:.7)-rect.top,m=(x+X)/2;points=[[x,y],[m,y],[m,Y],[X,Y]];}
+  else{const x=a.left+a.width/2-rect.left;points=[[x,a.bottom-rect.top+1],[x,b.top-rect.top-3]];}
+  const path=document.createElementNS(ns,'path');path.dataset.from=from;path.dataset.to=to;path.classList.add('product-edge');path.classList.toggle('muted',muted);path.classList.toggle('preview',!!selected&&!muted);
+  path.setAttribute('d',roundedRoute(points,5));path.setAttribute('marker-end','url(#arrow-'+(muted?'muted':selected?'selected':'base')+')');svg.append(path);
+ }
  if(failedQC){
   const a=$('quality-gate').getBoundingClientRect(),b=$('submission-node').getBoundingClientRect(),x=a.right-rect.left+1,y=a.top+a.height/2-rect.top,X=b.right-rect.left+4,Y=b.top+b.height/2-rect.top,rail=X+12;
   const returned=document.createElementNS(ns,'path');returned.classList.add('return-edge');returned.dataset.from='qc';returned.dataset.to='submission';returned.setAttribute('d',roundedRoute([[x,y],[rail,y],[rail,Y],[X,Y]]));returned.setAttribute('marker-end','url(#arrow-failed)');svg.append(returned);
@@ -190,14 +224,15 @@ function links(){
 }
 new ResizeObserver(()=>requestAnimationFrame(()=>{links();if(previewKey)showPreview(previewKey);if($('sql-view').open)placePopup($('sql-view'),node('extract'));})).observe($('chain'));
 function friendlyStep(name){if(name==='Retrieve locked analysis modules')return 'Load six code repositories at locked commits';if(name==='Prepare the pinned Docker environment')return 'Pull container image';if(name==='Checkout')return 'Check out analysis code';if(name==='Checkout source data')return 'Check out data settings';if(name==='Fetch versioned database snapshot')return 'Download the recorded data release';if(name==='Set up job')return 'Start runner';if(name==='Save the complete workflow outputs')return 'Save outputs';const stage=data?.stages.find(s=>s._step_number===data.execution?.jobs?.[0]?.steps.find(x=>x.name===name)?.number);return stage?names[stage.key]+(name.endsWith(' · reused')?' · reused':''):name;}
-function showConsole(){const space=document.querySelector('main').getBoundingClientRect().bottom-document.querySelector('.action-bar').getBoundingClientRect().top+10;$('console').style.bottom=space+'px';$('notice').style.bottom=space+'px';if(!data)return;if(qualityRecordOpen){showQualityRecord();return;}if(data.has_run===false){$('console-title').textContent='Ready for a new demonstration';$('console-lines').textContent='The previous execution records have been cleared.';$('console-link').removeAttribute('href');return;}const steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),actual=consoleRecord?.run_id===data.run_id&&consoleRecord?.attempt===data.attempt;let lines=[];if(actual){$('console-title').textContent='GitHub console · completed run';lines=consoleRecord.lines.map(line=>line.replace(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s*/,(_,t)=>time(t)+'  '));}else{$('console-title').textContent='Live GitHub step record';for(const s of steps)if(s.started_at&&['in_progress','completed'].includes(s.status))lines.push(time(s.started_at)+'  '+(s.status==='completed'?(s.conclusion==='success'?'✓':s.name.endsWith(' · reused')?'↺':'×'):'▶')+' '+s.name);if(!lines.length)lines=['Waiting for GitHub to assign a runner.'];}if(expected){$('console-title').textContent='Update stored · waiting for GitHub';lines=[expected.startsWith('db-')?'Database release '+expected.slice(3):'Settings commit '+expected.slice(0,8),'The update triggers the workflow in the analysis repository.'];}const qc=data.data_intake?.quality_check,qcView=qc&&(!qc.accepted||selected==='data');if(qcView){$('console-title').textContent='Data quality check · Database';lines=qualityRecord();}const text=lines.join('\n'),el=$('console-lines');if(el.textContent!==text){el.textContent=text;el.scrollTop=el.scrollHeight;}$('console-link').href=data.run_url;$('console-link').textContent=qcView&&!qc.accepted?'Previous GitHub run ↗':'View run ↗';}
+function showConsole(){const space=document.querySelector('main').getBoundingClientRect().bottom-document.querySelector('.action-bar').getBoundingClientRect().top+10;$('console').style.bottom=space+'px';$('notice').style.bottom=space+'px';if(!data)return;if(qualityRecordOpen){showQualityRecord();return;}if(data.has_run===false){$('console-title').textContent='Ready for a new demonstration';$('console-lines').textContent='The previous execution records have been cleared.';$('console-link').removeAttribute('href');return;}const steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),actual=consoleRecord?.run_id===data.run_id&&consoleRecord?.attempt===data.attempt;let lines=[];if(actual){$('console-title').textContent='GitHub console · completed run';lines=consoleRecord.lines.map(line=>line.replace(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s*/,(_,t)=>time(t)+'  '));}else{$('console-title').textContent='Live GitHub step record';for(const s of steps)if(s.started_at&&['in_progress','completed'].includes(s.status))lines.push(time(s.started_at)+'  '+(s.status==='completed'?(s.conclusion==='success'?'✓':s.name.endsWith(' · reused')?'↺':'×'):'▶')+' '+s.name);if(!lines.length)lines=['Waiting for GitHub to assign a runner.'];}if(expected){$('console-title').textContent='Update stored · waiting for GitHub';lines=[expected.startsWith('db-')?'Database release '+expected.slice(3):'Settings commit '+expected.slice(0,8),'The update triggers the workflow in the analysis repository.'];}const qc=data.data_intake?.quality_check,qcView=qc&&(!qc.accepted||selected==='data');if(qcView){$('console-title').textContent='Data quality check · Database';lines=qualityRecord();}const text=lines.join('\n'),el=$('console-lines');if(el.textContent!==text){el.textContent=text;el.scrollTop=el.scrollHeight;}$('console-link').href=data.run_url;$('console-link').textContent=qcView&&!qc.accepted?'View failed GitHub run ↗':'View run ↗';}
 async function loadConsole(){if(data.has_run===false||consolePending||data.status!=='completed'||(consoleRecord?.run_id===data.run_id&&consoleRecord?.attempt===data.attempt))return;consolePending=true;try{const r=await fetch('/api/console',{cache:'no-store'});if(r.ok){const next=await r.json();if(next.ready&&next.lines.length)consoleRecord=next;}}catch{}finally{consolePending=false;showConsole();}}
 function notice(text){$('notice-text').textContent=text;$('notice').hidden=false;}
 function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),active=steps.find(s=>s.status==='in_progress'),reused=data.stages.filter(s=>s.reused).length,busy=sending||!!expected||data.status!=='completed',stale=data.source?.stale,cloudBlocked=data.session&&!data.session.can_update;
- $('run-link').textContent=data.has_run===false?'Ready':'Run #'+data.number;$('run-link').href=data.run_url;$('run-state').textContent=data.demo?.phase==='cleaning'?'Resetting…':data.has_run===false?'Ready for a fresh demonstration':stale?'Last verified state':expected?'New run pending':data.status==='completed'?(data.conclusion==='success'?'Complete · '+(data.stages.length-reused)+' run · '+reused+' reused':data.conclusion):data.stages.filter(s=>s.status==='running').length>1?data.stages.filter(s=>s.status==='running').length+' analyses running in parallel':data.status.replaceAll('_',' ');$('live-dot').className='dot '+(busy?'live':data.conclusion==='success'?'success':'');
- const source=node('data');source.classList.toggle('selected',selected==='data');source.querySelector('.node-control').setAttribute('aria-pressed',String(selected==='data'));const qc=data.data_intake?.quality_check,version=data.database_version||(data.data_intake?.published?qc?.proposed_version:null);source.querySelector('.release').textContent=version?'v'+version:'Versioned data';source.querySelector('.qc').textContent=sending&&changeKind==='data'?'Checking QC…':qc?(qc.accepted?'✓ QC passed':'× QC failed'):'QC before release';if(Number(version)>=2024&&(!qc||qc.accepted))source.querySelector('.qc').textContent='✓ One added batch';source.querySelector('.qc').classList.toggle('failed',!!qc&&!qc.accepted);
+ $('run-link').textContent=data.has_run===false?'Ready':'Run #'+data.number;$('run-link').href=data.run_url;$('run-state').textContent=data.demo?.phase==='cleaning'?'Resetting…':data.has_run===false?'Ready for a fresh demonstration':stale?'Last verified state':expected?'New run pending':data.status==='completed'?(data.conclusion==='success'?'Complete · '+(data.stages.length-reused+(data.intake_stages||[]).filter(j=>!j.skipped).length)+' run · '+reused+' reused':data.conclusion):data.stages.filter(s=>s.status==='running').length>1?data.stages.filter(s=>s.status==='running').length+' analyses running in parallel':data.status.replaceAll('_',' ');$('live-dot').className='dot '+(busy?'live':data.conclusion==='success'?'success':'');
+ const source=node('data');source.classList.toggle('selected',selected==='data');source.querySelector('.node-control').setAttribute('aria-pressed',String(selected==='data'));const qc=data.data_intake?.quality_check,version=(data.intake_stages?.some(j=>j.key==='submission'&&!j.skipped)&&!data.intake_stages?.some(j=>j.key==='ingest'&&j.status==='completed')?data.latest_database_version:data.database_version)||(data.data_intake?.published?qc?.proposed_version:null);source.querySelector('.release').textContent=version?'v'+version:'Versioned data';source.querySelector('.qc').textContent=sending&&changeKind==='data'?'Checking QC…':qc?(qc.accepted?'✓ QC passed':'× QC failed'):'QC before release';if(Number(version)>=2024&&(!qc||qc.accepted))source.querySelector('.qc').textContent='✓ One added batch';source.querySelector('.qc').classList.toggle('failed',!!qc&&!qc.accepted);
  for(const s of data.stages){const el=node(s.key),state=expected?(impact.has(s.key)||!selected?'waiting':s.status):s.status;el.className='stage '+state+(s.reused&&!expected?' reused':'')+(selected&&impact.has(s.key)?' impacted':'')+(selected&&!impact.has(s.key)?' outside-impact':'')+(selected===s.key?' selected':'');el.querySelector('.state-icon').textContent=s.reused&&!expected?'↺':icons[state]||'·';el.querySelector('.state-label').textContent=s.reused&&!expected?'Reused':states[state]||state;el.querySelector('.node-control').setAttribute('aria-pressed',String(selected===s.key));el.title=(s.parents.length?'Inputs: '+s.parents.map(p=>names[p]).join(' + '):'Input: accepted database release')+' · select to update downstream';}
- const count=selected?data.stages.filter(s=>impact.has(s.key)).length:data.stages.length,pendingCount=plannedRoots().length,replayData=key==='data'&&Number(data.database_version)>=2024;
+ const submittingData=key==='data'&&(!dataDraft||dataDraft==='new');
+ const count=(selected?data.stages.filter(s=>impact.has(s.key)).length:data.stages.length)+(submittingData?3:0),pendingCount=plannedRoots().length,replayData=key==='data'&&Number(data.database_version)>=2024;
  $('selection-title').textContent=key==='data'?(replayData?'Replay data update':'New data'):names[key]+(key.startsWith('prepare_')||key.startsWith('assessment_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
  $('progress').textContent=(data.has_run===false&&!data.baseline_available&&key!=='data'?'Prepare initial inputs → ':key==='data'?(replayData?'Replay the accepted data update → ':'Add one batch → QC → '):pendingCount>1?pendingCount+' starting stages → ':'Run this stage → ')+count+' stages run'+(count<data.stages.length?' · '+(data.stages.length-count)+' kept':'');
  for(const item of ['data',...data.stages.map(s=>s.key)])sourceLink(item);drawBranchButton(busy);
@@ -205,16 +240,17 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  if(key==='data'){const choices=[...(data.data_versions||[2023]).map(v=>[String(v),'Release '+v]),['new',Number(data.latest_database_version)>=2024?'Replay new-data update':'Add checked batch']];const signature=JSON.stringify(choices);if($('data-version').dataset.choices!==signature){$('data-version').replaceChildren(...choices.map(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;return option;}));$('data-version').dataset.choices=signature;}$('data-version').value=dataDraft||'new';}
  $('sql-button').hidden=key!=='extract';$('sql-button').disabled=!nextSource('extract');
  drawBranches(key,busy);
- $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?(replayData?'Replay data update →':'Add data + run →'):pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()==='failed'&&!busy){$('selection-title').textContent='Correct and resubmit';$('run').textContent='Resubmit + run →';}
- if(key==='data'&&dataDraft&&dataDraft!=='new'){$('selection-title').textContent='Data release '+dataDraft;$('progress').textContent='Restore this snapshot → 11 stages run';$('run').textContent=busy?'Starting…':'Run with v'+dataDraft+' →';}
+ $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?(replayData?'Replay data update →':'Add data + run →'):pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()==='failed'&&!busy){$('selection-title').textContent='Correct and resubmit';$('run').textContent='Correct & resubmit →';}
+ if(submittingData&&qualityStatus()!=='failed'&&!busy){$('selection-title').textContent='Data submission';$('progress').textContent='Submit → QC → correct any flagged records';$('run').textContent='Submit data →';}
+ if(key==='data'&&dataDraft&&dataDraft!=='new'){$('selection-title').textContent='Data release '+dataDraft;$('progress').textContent='Restore this snapshot → 13 analysis stages';$('run').textContent=busy?'Starting…':'Run with v'+dataDraft+' →';}
  $('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||dataDraft!=='new'||!data.database_connected;$('invalid').disabled=busy||!!stale;
  $('record-dot').className=$('live-dot').className;$('verified').textContent=time(data.source?.last_success);$('message').className='';
  $('message').textContent=sending?(changeKind==='data'?'Validate and publish incoming data…':'Commit the selected update…'):expected?'Update stored → waiting for the next GitHub run':stale?'Connection interrupted · showing the last verified run':active?'Running on GitHub · '+(data.stages.filter(s=>s.status==='running').map(s=>names[s.key]).join(' + ')||friendlyStep(active.name)):data.status==='completed'?(data.conclusion==='success'?'✓ Outputs saved · report ready':'GitHub run '+data.conclusion):'GitHub is assigning a runner…';
  if(data.has_run===false&&!busy){$('message').textContent='Ready · verified baseline inputs available';$('run-link').removeAttribute('href');}
  if(data.demo?.reset_at&&!busy){const seconds=Math.max(0,Math.ceil((Date.parse(data.demo.reset_at)-Date.now())/1000));$('message').textContent+=' · resets in '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');}
  if(cloudBlocked&&!busy&&!stale){$('message').textContent=data.session.message.includes('owner')?'Viewing only · owner GitHub connection needed':data.session.message;$('message').className='read-only';}
- if(qc&&!qc.accepted&&!busy){$('message').textContent='QC rejected the batch · data and GitHub run unchanged';}
- drawQuality();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
+ if(qc&&!qc.accepted&&!busy){$('message').textContent='QC failed on GitHub · returned to Korea · loading and extraction blocked';}
+ drawQuality();drawCpueProducts();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
 async function refresh(force=false){if(window.workshopActive===false||refreshing)return;if(!force&&data?.status==='completed'&&!expected&&Date.now()-lastRefresh<10000)return;refreshing=true;lastRefresh=Date.now();try{const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw Error();const next=await r.json();if(!next.ready)throw Error();data=next;if(data.has_run===false&&!expected){consoleRecord=null;$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}if(expected===data.commit||(data.database_version&&expected==='db-'+data.database_version)){expected='';loadBranches();}draw();}catch{$('message').textContent='Live connection unavailable · retrying';$('run').disabled=true;}finally{refreshing=false;}}
 function drawBranches(key,busy){
  const choices=branchCatalog?.options[key]||{},entries=Object.entries(choices),picker=$('branch');
@@ -251,6 +287,7 @@ function drawBranchList(){
 $('branch-close').onclick=$('branch-done').onclick=()=>$('branch-view').close();
 const sourceCache=new Map();let sourceTicket=0;
 $('source-close').onclick=()=>$('source-view').close();
+$('source-view').addEventListener('close',()=>{++sourceTicket;$('source-body').replaceChildren();});
 async function openSource(key){
  hidePreview();const ticket=++sourceTicket,body=$('source-body');$('source-title').textContent=key==='data'?'Database':'Code repository · '+stageTitle(key);$('source-meta').textContent='';body.replaceChildren();$('source-view').showModal();
  if(key==='data'){
@@ -299,7 +336,7 @@ $('sql-button').onclick=async()=>{
  if($('sql-view').open)placePopup($('sql-view'),node('extract'));
 };
 $('data-version').onchange=()=>{dataDraft=$('data-version').value;draw();};
- $('run').onclick=()=>publish();$('invalid').onclick=()=>publish(true);$('logs').onclick=()=>{qualityRecordOpen=false;$('console').hidden=!$('console').hidden;$('logs').setAttribute('aria-expanded',String(!$('console').hidden));$('logs').textContent=$('console').hidden?'Show record':'Hide record';showConsole();};$('dismiss').onclick=()=>{$('notice').hidden=true;};
+ $('run').onclick=()=>publish(selectedKey()==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()!=='failed');$('invalid').onclick=()=>publish(true);$('logs').onclick=()=>{qualityRecordOpen=false;$('console').hidden=!$('console').hidden;$('logs').setAttribute('aria-expanded',String(!$('console').hidden));$('logs').textContent=$('console').hidden?'Show record':'Hide record';showConsole();};$('dismiss').onclick=()=>{$('notice').hidden=true;};
 if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');refresh();loadBranches();setInterval(refresh,2000);
 async function heartbeat(){try{const r=await fetch('/api/presentation-info',{cache:'no-store'});if(r.ok&&(await r.json()).presentation==='cpue-workshop'&&parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');}catch{}}
 heartbeat();setInterval(heartbeat,4000);

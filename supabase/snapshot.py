@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import time
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
@@ -15,8 +17,16 @@ def rpc(url, key, name, body):
     if key.startswith('eyJ'):
         headers['Authorization'] = 'Bearer ' + key
     request = Request(url + '/rest/v1/rpc/' + name, data=json.dumps(body).encode(), headers=headers)
-    with urlopen(request, timeout=20) as response:
-        raw = response.read(4 * 1024 * 1024 + 1)
+    for attempt in range(3):
+        try:
+            with urlopen(request, timeout=20) as response:
+                raw = response.read(4 * 1024 * 1024 + 1)
+            break
+        except (HTTPError, URLError, TimeoutError) as error:
+            if attempt==2 or isinstance(error,HTTPError) and error.code not in (429,502,503,504):
+                raise
+            print('Snapshot service temporarily unavailable; retrying the same read.', flush=True)
+            time.sleep(attempt+1)
     if len(raw) > 4 * 1024 * 1024:
         raise ValueError('Snapshot exceeds the demonstration limit')
     return json.loads(raw)

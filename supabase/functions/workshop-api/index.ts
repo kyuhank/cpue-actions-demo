@@ -53,7 +53,7 @@ export async function handle(request:Request){
   const id=request.headers.get('X-Workshop-Request')||'';if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id))return reply({detail:'A request identifier is required.'},400);
   if(!enabled())return reply({detail:'The owner must connect the restricted demo credential and confirm a zero-dollar Actions spending limit.'},503);
   // Check GitHub directly before any data or settings mutation.
-  const s:any=await current();if(!s.ready||s.status!=='completed'||s.conclusion!=='success')return reply({detail:'Wait for a successful workflow before updating.'},409);
+  const s:any=await current();if(!s.ready||s.status!=='completed')return reply({detail:'Wait for the current workflow to finish before updating.'},409);
   const control=await rpc('workshop_state');if(pendingUpdate(control,s))return reply({detail:'An earlier update is waiting for GitHub. Inspect its request before submitting another.'},409);
   let claim;try{claim=await rpc('workshop_reserve',{p_id:id,p_kind:kind});}catch{return reply({detail:'Another update is pending, the 30-second interval has not passed, or today’s 60 updates are used.'},429);}
   if(claim.duplicate)return reply(claim.result||{detail:'This request is already being processed.'},claim.result?200:409);

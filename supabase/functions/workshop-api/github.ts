@@ -91,7 +91,7 @@ export async function stageOutputs(source:string){
  if(a.digest?.startsWith('sha256:')){const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes).buffer))).map(x=>x.toString(16).padStart(2,'0')).join('');if(a.digest!=='sha256:'+hash)throw Error('Artifact checksum mismatch.');}
  const wanted=new Map(outputNames(id[3]).map(name=>[id[3]+(name==='record.json'?'/':'/outputs/')+name,name]));
  const entries=unzipSync(bytes,{filter:f=>wanted.has(f.name)&&f.originalSize<=2*1024*1024});
- return Object.fromEntries(Object.entries(entries).map(([path,value])=>[wanted.get(path),new TextDecoder().decode(value)]));
+ return Object.fromEntries([...wanted].filter(([path])=>entries[path]).map(([path,name])=>[name,new TextDecoder().decode(entries[path])]));
 }
 export async function output(source:string,file:string){
  const id=outputStage(source);if(!id||!outputNames(id[3]).includes(file))throw Error('Unknown output.');

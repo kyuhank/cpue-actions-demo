@@ -31,7 +31,7 @@ begin
  select * into previous from workshop_private.cloud_requests where id=p_id;
  if found then return jsonb_build_object('duplicate',true,'result',previous.result); end if;
  select count(*),max(created_at) into total,latest from workshop_private.cloud_requests where created_at>=date_trunc('day',now());
- if total>=60 then raise exception 'Daily demonstration limit reached'; end if;
+ if total>=1000 then raise exception 'Daily demonstration limit reached'; end if;
  if latest>now()-interval '30 seconds' then raise exception 'Wait for the current demonstration before updating again'; end if;
  if exists(select 1 from workshop_private.cloud_requests where finished_at is null and created_at>now()-interval '10 minutes') then raise exception 'A demonstration request is already being processed'; end if;
  insert into workshop_private.cloud_requests(id,kind) values(p_id,p_kind);
@@ -43,7 +43,8 @@ language sql security definer set search_path='' as $$
 $$;
 create or replace function public.workshop_state() returns jsonb
 language sql stable security definer set search_path='' as $$
- select jsonb_build_object('remaining', greatest(0,60-(select count(*) from workshop_private.cloud_requests where created_at>=date_trunc('day',now()))),
+ select jsonb_build_object('remaining', greatest(0,1000-(select count(*) from workshop_private.cloud_requests where created_at>=date_trunc('day',now()))),
+ 'daily_limit',1000, 'daily_reset_at',date_trunc('day',now())+interval '1 day',
  'next_update', (select max(created_at)+interval '30 seconds' from workshop_private.cloud_requests),
  'last_reset_at',(select last_reset_at from workshop_private.cloud_demo where id),
  'last_request', (select jsonb_build_object('kind',kind,'created_at',created_at,'result',result) from workshop_private.cloud_requests order by created_at desc limit 1));

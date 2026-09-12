@@ -11,7 +11,7 @@ The service stores versioned synthetic data and connects accepted releases to th
 
 Incoming data pass QC before publication. A release webhook triggers extraction and downstream analyses. Published data remain immutable during a demonstration.
 
-Controls accept predefined synthetic updates only. Credentials remain server-side. Limits are 60 requests per UTC day, one active run and a 30-second interval. Cleanup starts ten minutes after completion, checked once per minute; request limits survive reset. The versioned baseline archive is retained for intermediate starts.
+Controls accept predefined synthetic updates only. Credentials remain server-side. Limits are 1,000 requests per UTC day, one active run and a 30-second interval. Cleanup starts ten minutes after completion, checked once per minute; request limits survive reset. The versioned baseline archive is retained for intermediate starts.
 
 [Scheduled functions](https://supabase.com/docs/guides/functions/schedule-functions)
 

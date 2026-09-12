@@ -42,11 +42,11 @@ function node(key){
  const control=document.createElement('button');control.type='button';control.className='node-control';
  const title=document.createElement('strong');title.textContent=['cpue_vessel','cpue_year'].includes(key)?'CPUE analysis':names[key];control.append(title);
  if(key==='data'){const version=document.createElement('div');version.className='release';const qc=document.createElement('div');qc.className='qc';control.append(version,qc);}
- else{const state=document.createElement('small');state.innerHTML='<span class="state-icon"></span><span class="state-label"></span>';if(['cpue_vessel','cpue_year'].includes(key)){const variant=document.createElement('span');variant.className='analysis-variant';variant.textContent=key==='cpue_vessel'?'A':'B';state.prepend(variant);}control.append(state);if(key==='synthesis'){const output=document.createElement('span');output.className='output-note';output.textContent='Plots + tables';control.append(output);}}
- const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.target='_blank';link.rel='noopener';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};link.onmouseenter=hidePreview;
+ else{const state=document.createElement('small');state.innerHTML='<span class="state-icon"></span><span class="state-label"></span>';if(['cpue_vessel','cpue_year'].includes(key)){const variant=document.createElement('span');variant.className='analysis-variant';variant.textContent=key==='cpue_vessel'?'A':'B';state.prepend(variant);}control.append(state);if(['cpue_summary','synthesis'].includes(key)){const output=document.createElement('span');output.className='output-note';output.textContent='Plots + tables';control.append(output);}}
+ const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.target='_blank';link.rel='noopener';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};
  if(key==='data'){const shell=document.createElementNS('http://www.w3.org/2000/svg','svg');shell.setAttribute('viewBox','0 0 140 100');shell.setAttribute('preserveAspectRatio','none');shell.setAttribute('aria-hidden','true');shell.classList.add('database-shell');shell.innerHTML='<path class=database-body d="M1 12V87C1 103 139 103 139 87V12"/><ellipse cx=70 cy=12 rx=69 ry=11 /><path class=record-lines d="M38 76H112M38 84H112M38 92H112M65 73V95M88 73V95"/><path class=record-keys d="M27 74h5v4h-5zM27 82h5v4h-5zM27 90h5v4h-5z"/>';el.append(shell);}
  el.append(control,link);el.onclick=()=>{selected=key;if(key==='data')dataDraft=String(data?.database_version||2023);draw();showPreview(key);};
- el.onmouseleave=hidePreview;control.onblur=hidePreview;
+
  $('chain').append(el);return el;
 }
 function drawCpueProducts(){}
@@ -92,9 +92,26 @@ function placePopup(box,element){
  box.style.width=best.width+'px';box.style.maxHeight=best.maxHeight+'px';box.style.left=best.left+'px';box.style.top=best.top+'px';
 }
 
+function validPreviewSource(source){return source&&/^kyuhank\/cpue-(actions-demo|demo-(extract|cpue|inputs|assessment|synthesis|report))$/.test(source.repository)&&/^[a-f0-9]{40}$/.test(source.commit);}
+$('preview-close').onclick=hidePreview;
+document.addEventListener('pointerdown',event=>{if(!event.target.closest('#preview,#chain [data-key]'))hidePreview();});
 function showPreview(key){
  if(!data||sending||$('sql-view').open||$('branch-view').open||$('source-view').open)return;previewKey=key;
  const stage=[...data.stages,...(data.intake_stages||[])].find(s=>s.key===key);
+ const source=(data.has_run&&stage?.code_source)||nextSource(key),registered=validPreviewSource(source),planned=nextSource(key);
+ $('preview-repo').hidden=$('preview-version').hidden=!registered&&key!=='data';
+ $('preview-next').hidden=true;
+ if(key==='data'){
+  $('preview-repo').textContent='Supabase · synthetic database';$('preview-version').textContent='Saved release v'+(data.database_version||2023);
+  $('preview-repo').onclick=()=>openSource('data');
+ }else if(registered){
+  $('preview-repo').textContent=source.repository+'  ›';
+  $('preview-repo').onclick=()=>openSource(key,source);
+  $('preview-version').textContent=(source.branch||'commit')+' · '+source.commit.slice(0,8)+(data.has_run&&stage?.code_source?' · recorded code':' · selected code');
+  if(data.has_run&&validPreviewSource(planned)&&planned.commit!==source.commit){$('preview-next').hidden=false;$('preview-next').textContent='Next run: '+planned.branch+' · '+planned.commit.slice(0,8);}
+ }
+ $('preview-execution').hidden=!data.has_run||key==='data';
+ $('preview-execution').onclick=()=>{hidePreview();qualityRecordOpen=key==='qc';$('console').hidden=false;$('logs').textContent='Hide record';$('logs').setAttribute('aria-expanded','true');if(qualityRecordOpen)showQualityRecord();else showConsole();};
  $('preview-title').textContent=(key==='qc'?'Quality check':names[key])+(key.startsWith('assessment_')||key.startsWith('prepare_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
  let lines=[];
  if(key==='data'||(!stage&&key==='qc')){
@@ -104,7 +121,7 @@ function showPreview(key){
  }else if(stage){
   $('preview-state').textContent=(stage.reused?'Reused':states[stage.status]||stage.status)+(data.has_run?' · GitHub #'+data.number:'');
   const record=previewLog?.run_id===data.run_id&&previewLog?.stage===key?previewLog:null;
-  if(record?.lines.length){lines=record.lines.slice(-3);$('preview-state').textContent=record.source+' · '+(stage.reused?'Reused':states[stage.status]||stage.status);}
+  if(record?.lines.length){lines=record.lines.slice(-3);$('preview-state').textContent=record.source+' · Run #'+data.number+' · '+(stage.reused?'Reused':states[stage.status]||stage.status);}
   else lines=stage.reused?['Verified outputs retained.']:stage.status==='waiting'?['Waiting for '+(stage.parents.map(p=>names[p]).join(' + ')||'the selected data release')+'.']:['Reading the GitHub execution record…'];
   loadPreviewLog(key);
  }
@@ -135,16 +152,16 @@ function qualityStatus(){
 function drawQuality(){
  let gate=$('quality-gate');if(!gate){
   gate=document.createElement('button');gate.id='quality-gate';gate.type='button';gate.dataset.key='qc';gate.innerHTML='<strong>QC</strong><small></small>';
-  gate.onclick=()=>{qualityRecordOpen=true;hidePreview();$('console').hidden=false;$('logs').textContent='Hide record';$('logs').setAttribute('aria-expanded','true');showQualityRecord();};
-  gate.onmouseleave=hidePreview;gate.onblur=hidePreview;$('chain').append(gate);
+  gate.onclick=()=>{showPreview('qc');};
+  $('chain').append(gate);
  }
- let submission=$('submission-node');if(!submission){submission=document.createElement('div');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.innerHTML='<button class="node-control"><strong>Data submission</strong></button>';submission.onclick=()=>{selected='data';dataDraft='new';draw();};$('chain').append(submission);}
+ let submission=$('submission-node');if(!submission){submission=document.createElement('div');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.innerHTML='<button class="node-control"><strong>Data submission</strong></button>';submission.onclick=()=>{selected='data';dataDraft='new';draw();showPreview('submission');};$('chain').append(submission);}
  submission.classList.toggle('selected',selected==='data'&&(!dataDraft||dataDraft==='new'));
  node('data').classList.toggle('selected',selected==='data'&&dataDraft!=='new');
  let ingest=$('ingest-node');if(!ingest){ingest=document.createElement('button');ingest.id='ingest-node';ingest.dataset.key='ingest';ingest.textContent='Prepare & load';ingest.title='Owner · Jessica, Tiffany. Align fields, formats and units; load accepted records into the database.';$('chain').append(ingest);}
  for(const [key,el] of [['submission',submission],['qc',gate]]){
-  el.onmouseleave=hidePreview;
-  let link=el.querySelector('.source-link');if(!link){link=document.createElement('a');link.className='source-link';link.textContent='↗';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};link.onmouseenter=hidePreview;el.append(link);}sourceLink(key);
+
+  let link=el.querySelector('.source-link');if(!link){link=document.createElement('a');link.className='source-link';link.textContent='↗';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};el.append(link);}sourceLink(key);
  }
 
  const actualIngest=data.intake_stages?.find(j=>j.key==='ingest');
@@ -160,7 +177,7 @@ function drawQuality(){
  if(phase==='rechecking')gate.querySelector('small').textContent='Recheck…';
  gate.style.transform='translateY(-83px)';
  gate.title='View the data quality check';
- if(!ingest.querySelector('.source-link')){const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource('ingest');};ingest.append(link);}sourceLink('ingest');ingest.onmouseleave=hidePreview;
+ if(!ingest.querySelector('.source-link')){const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource('ingest');};ingest.append(link);}sourceLink('ingest');
  const intakeSelected=selected==='data'&&(!dataDraft||dataDraft==='new');for(const el of [submission,gate,ingest]){el.classList.toggle('impacted',intakeSelected);el.classList.toggle('outside-impact',!!selected&&!intakeSelected);}
  const correction=data.intake_stages?.find(j=>j.key==='qc')?.correction_phase;gate.dataset.correction=correction||'';if(correction==='corrected')gate.title='Initial QC failed → example corrected and resubmitted → recheck passed';
  gate.setAttribute('aria-label','Quality check: '+{completed:'passed',failed:'failed',running:'checking',waiting:'ready'}[state]+'. View checks.');
@@ -279,7 +296,19 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  if(cloudBlocked&&!busy&&!stale){$('message').textContent=data.session.message.includes('owner')?'Viewing only · owner GitHub connection needed':data.session.message;$('message').className='read-only';}
  if(data.intake_stages?.some(j=>j.correction_phase==='resubmitting')){$('message').textContent='QC returned the example → provider correction and resubmission';}else if(data.intake_stages?.some(j=>j.correction_phase==='rechecking')){$('message').textContent='Corrected example submitted → checking again';}
  if(qc&&!qc.accepted&&!busy){$('message').textContent='QC failed on GitHub · returned to Korea · loading and extraction blocked';}
- narrate();if(cloudBlocked&&!busy&&!stale&&data.session.next_update){const wait=Math.max(0,Math.ceil((Date.parse(data.session.next_update)-Date.now())/1000));if(wait){$('run').textContent='Run again in '+wait+' s';$('message').textContent='Run complete. The next run is available in '+wait+' seconds.';}else if(data.session.remaining>0&&data.demo?.phase!=='cleaning'&&!data.session.message.includes('owner')){$('run').textContent='Confirming completion…';$('message').textContent='All selected jobs have finished. Confirming the run record…';}}drawQuality();drawCpueProducts();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
+ narrate();if(cloudBlocked&&!busy&&!stale&&data.session.next_update){const wait=Math.max(0,Math.ceil((Date.parse(data.session.next_update)-Date.now())/1000));if(wait){$('run').textContent='Run again in '+wait+' s';$('message').textContent='Run complete. The next run is available in '+wait+' seconds.';}else if(data.session.remaining>0&&data.demo?.phase!=='cleaning'&&!data.session.message.includes('owner')){$('run').textContent='Confirming completion…';$('message').textContent='All selected jobs have finished. Confirming the run record…';}}drawQuota(busy);drawQuality();drawCpueProducts();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
+function drawQuota(busy){
+ const session=data.session||{},remaining=session.remaining;
+ $('quota').hidden=busy||!Number.isFinite(remaining)||remaining<=0;
+ $('quota').textContent=remaining+' left today';
+ if(!busy&&remaining===0&&!session.can_update){
+  const reset=session.daily_reset_at?new Date(session.daily_reset_at):null;
+  const when=reset&&!Number.isNaN(reset.getTime())?reset.toLocaleString('en-GB',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZoneName:'short'}):'';
+  $('run').textContent='Daily limit reached';
+  $('message').textContent=(session.daily_limit?'All '+session.daily_limit+' shared requests used today.':'The shared daily limit has been reached.')+(when?' Runs reopen '+when+'.':' You can still inspect the outputs.');
+  document.querySelector('.record').dataset.phase='limited';
+ }
+}
 function narrate(){
  const record=document.querySelector('.record'),qcJob=data.intake_stages?.find(j=>j.key==='qc'),phase=qcJob?.correction_phase;
  const running=data.stages.filter(s=>s.status==='running'),intake=data.intake_stages?.find(j=>j.status==='running'&&!j.skipped);
@@ -394,13 +423,14 @@ $('branch-close').onclick=$('branch-done').onclick=()=>$('branch-view').close();
 const sourceCache=new Map();let sourceTicket=0;
 $('source-close').onclick=()=>$('source-view').close();
 $('source-view').addEventListener('close',()=>{++sourceTicket;$('source-body').replaceChildren();});
-async function openSource(key){
+async function openSource(key,recordedSource=null){
  hidePreview();const ticket=++sourceTicket,body=$('source-body');$('source-title').textContent=key==='data'?'Database':'Code repository · '+stageTitle(key);$('source-meta').textContent='';body.replaceChildren();$('source-view').showModal();
  if(key==='data'){
   $('source-meta').textContent='Supabase · saved snapshot · read-only records';const frame=document.createElement('iframe');frame.title='Database snapshot preview';frame.setAttribute('sandbox','allow-scripts allow-same-origin');frame.referrerPolicy='no-referrer';frame.src='https://kyuhank.github.io/cpue-actions-demo/data.html?version='+(dataDraft&&dataDraft!=='new'?dataDraft:data?.database_version||2023);body.append(frame);return;
  }
- const source=nextSource(key);if(!source||!/^kyuhank\/cpue-(actions-demo|demo-(extract|cpue|inputs|assessment|synthesis|report))$/.test(source.repository)||!/^[a-f0-9]{40}$/.test(source.commit)){body.textContent='Loading the registered source. Try again in a moment.';return;}
- $('source-meta').textContent=source.repository+' · '+source.branch+' · '+source.commit.slice(0,12);
+ const source=recordedSource||nextSource(key);if(!source||!/^kyuhank\/cpue-(actions-demo|demo-(extract|cpue|inputs|assessment|synthesis|report))$/.test(source.repository)||!/^[a-f0-9]{40}$/.test(source.commit)){body.textContent='Loading the registered source. Try again in a moment.';return;}
+ $('source-title').textContent=source.repository;
+ $('source-meta').textContent=source.branch+' · '+source.commit.slice(0,12)+' · Read-only files from GitHub';
  const picker=document.createElement('select'),code=document.createElement('pre');picker.id='source-file';picker.setAttribute('aria-label','Repository file');body.append(picker,code);
  const base='https://raw.githubusercontent.com/'+source.repository+'/'+source.commit+'/';
  const load=async()=>{const file=picker.value;code.textContent='Loading '+file+'…';try{const url=base+file.split('/').map(encodeURIComponent).join('/');let text=sourceCache.get(url);if(text===undefined){const r=await fetch(url,{signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error('The file is temporarily unavailable.');text=(await r.text()).slice(0,60000);sourceCache.set(url,text);}if(ticket===sourceTicket&&picker.value===file)code.textContent=text;}catch(e){if(ticket===sourceTicket)code.textContent=e.message;}};

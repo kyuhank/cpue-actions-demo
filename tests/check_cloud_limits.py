@@ -32,11 +32,12 @@ try:
  good("update workshop_private.cloud_requests set created_at=now()-interval '1 minute';")
  assert sql(f"set role service_role;select public.workshop_reserve('{uuid.uuid4()}','data');").returncode!=0
  good(f"select public.workshop_finish('{second}', '{{\"published\":false}}');")
- good("insert into workshop_private.cloud_requests(id,kind,created_at,finished_at) select gen_random_uuid(),'data',now()-interval '2 minutes',now() from generate_series(1,58);")
- assert json.loads(good('set role service_role;select public.workshop_state()'))['remaining']==0
+ good("insert into workshop_private.cloud_requests(id,kind,created_at,finished_at) select gen_random_uuid(),'data',now()-interval '2 minutes',now() from generate_series(1,998);")
+ state=json.loads(good('set role service_role;select public.workshop_state()'))
+ assert state['remaining']==0 and state['daily_limit']==1000 and state['daily_reset_at']
  assert sql(f"set role service_role;select public.workshop_reserve('{uuid.uuid4()}','data');").returncode!=0
  assert good('set role service_role;select public.workshop_dispatch_claim(2025)')=='t'
  assert good('set role service_role;select public.workshop_dispatch_claim(2025)')=='f'
  assert sql('set role service_role;select public.workshop_dispatch_claim(9999)').returncode!=0
- print('Cloud controls: only one of 12 simultaneous requests accepted; retries do not repeat writes; pending/30-second/daily-60 gates enforced; anonymous access denied; database release dispatch claimed once.')
+ print('Cloud controls: only one of 12 simultaneous requests accepted; retries do not repeat writes; pending/30-second/daily-1000 gates enforced; anonymous access denied; database release dispatch claimed once.')
 finally:subprocess.run(['docker','rm','-f',name],check=True,stdout=subprocess.DEVNULL)

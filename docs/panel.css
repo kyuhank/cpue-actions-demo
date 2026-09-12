@@ -58,9 +58,11 @@
 .submission-node,.quality-gate,.ingest-node{border-color:#9bc4a1;background:#edf7ee;color:#247343}
 .submission-node.running,.ingest-node.running{border-color:#b77b1c;background:#fff6e6;color:#8d5b0e;box-shadow:0 0 0 2px #f2d29a}
 .stage[data-key=cpue_summary],.stage[data-key=cpue_report]{height:54px;min-height:54px;padding:9px 7px}
-.stage[data-key=cpue_summary]{transform:translateY(-24px);height:64px;min-height:64px}.stage[data-key=cpue_report]{transform:translateY(48px)}
+.stage[data-key=cpue_summary]{transform:translateY(-36px);height:88px;min-height:88px;padding:8px 7px}.stage[data-key=cpue_report]{transform:translateY(48px)}
 .stage[data-key=cpue_summary] strong,.stage[data-key=cpue_report] strong{font-size:12px;white-space:normal;padding-right:6px;line-height:1.15}
 .stage[data-key=cpue_summary] small,.stage[data-key=cpue_report] small{font-size:10px;margin-top:7px}
+.stage[data-key=cpue_summary] small{margin-top:5px}
+.stage[data-key=cpue_summary] .output-note{display:block;margin-top:5px;color:#587483;font-size:10px}
 /* Selection shows the rerun path while retained inputs remain in context. */
 .stage.outside-impact,.submission-node.outside-impact,.quality-gate.outside-impact,.ingest-node.outside-impact{opacity:.38}
 .stage.impacted:not(.running):not(.failed){border:1.6px solid var(--stage-ink);box-shadow:0 2px 7px #12304c12;background:white}
@@ -101,3 +103,14 @@
 .chain .data-node.running{opacity:1;filter:drop-shadow(0 0 3px #bc883155)}
 .chain .data-node.running .database-body,.chain .data-node.running .database-shell ellipse{stroke:#bc8831;stroke-width:2.5;stroke-dasharray:none;fill:#fff3d9}
 .chain .data-node.running strong,.chain .data-node.running .release,.chain .data-node.running .qc{color:#946316}
+
+/* Click to inspect the recorded repository and execution without leaving the slide. */
+#preview{width:350px;pointer-events:auto}
+.preview-heading{display:flex;align-items:center;gap:10px}.preview-heading strong{flex:1;min-width:0}
+#preview-close{border:0;background:none;color:#587483;font-size:21px;padding:0 2px;line-height:1}
+#preview-repo{display:block;width:100%;border:0;background:#edf5fa;text-align:left;color:#007ebc;font-size:13px;font-weight:bold;padding:8px 10px;border-radius:5px;margin-top:9px;overflow-wrap:anywhere}
+#preview-version{display:block;color:#536d7e;font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;margin:6px 0}
+#preview-next{display:block;font-size:11px;color:#637e8d;margin:4px 0 7px}
+#preview-execution{display:block;border:0;background:none;color:#0085ca;font-size:11px;margin-top:8px;padding:0}
+.record[data-phase=limited]{background:#fff5e1;border-left-color:#bc8831}
+#quota{font-size:10px;font-weight:normal;white-space:nowrap;color:#587483}

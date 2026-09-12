@@ -35,10 +35,14 @@ def write(key,files,success=True):
     with tarfile.open(ROOT/name,'w:gz') as archive:archive.add(folder,arcname='stages/'+key)
 def main():
     key=sys.argv[1]
+    started=time.monotonic()
+    def visible():time.sleep(max(0,min(3,float(os.getenv('WORKSHOP_INTAKE_SECONDS','2.5')))-(time.monotonic()-started)))
     if key=='submission':
+        print('SUBMISSION: receiving the provider example',flush=True)
         batch=json.loads((ROOT/'supabase/functions/workshop-api/batches.json').read_text())['2024']
         if os.getenv('WORKSHOP_INTAKE_MODE')=='invalid':batch['sets'][0][3]=0
         write(key,{'submission.json':batch,'receipt.json':{'owner':'Korea','release':2024,'rows':len(batch['sets']),'sha256':digest(canonical(batch))}})
+        visible()
         print(f'SUBMISSION complete: Korea; {len(batch["sets"])} records; receipt and checksum saved',flush=True)
     elif key=='return':
         rejected=json.loads((ROOT/'stages/qc/outputs/quality.json').read_text())
@@ -64,7 +68,8 @@ def main():
     elif key=='qc':
         corrected=ROOT/'stages/qc/outputs/accepted-submission.json'
         batch=json.loads((corrected if corrected.exists() else ROOT/'stages/submission/outputs/submission.json').read_text());quality=check(batch)
-        if corrected.exists():time.sleep(min(3,float(os.getenv('WORKSHOP_INTAKE_SECONDS','3'))))
+        print('QC: checking '+('the corrected submission' if corrected.exists() else 'the incoming submission'),flush=True)
+        visible()
         write(key,{'quality.json':quality},quality['accepted'])
         for error in quality['errors']:print('::error title=QC returned to Korea::'+error['message']+' '+json.dumps(error.get('examples',[])),flush=True)
         print('QC '+('complete: accepted; release may be prepared' if quality['accepted'] else 'FAILED: returned to Korea; correct and resubmit; loading and extraction blocked'),flush=True)
@@ -92,6 +97,7 @@ def main():
                 write(key,{'load-error.json':{'status':'failed','http_status':error.code,'message':'The checked run could not be verified. No downstream analysis was started.'}},False)
                 raise SystemExit('LOAD stopped: checked-run verification failed (HTTP '+str(error.code)+')')
         write(key,{'release.json':release,'prepared.json':{'rows':len(batch['sets']),'sha256':sha,'version':2024}})
+        visible()
         print('LOAD complete: checked release v2024 stored in PostgreSQL; extraction unlocked',flush=True)
     else:raise SystemExit('Unknown intake stage')
 if __name__=='__main__':main()

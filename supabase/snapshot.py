@@ -57,6 +57,8 @@ def materialise(snapshot, target):
 
 
 if __name__ == '__main__':
+    import time
+    started=time.monotonic()
     version = os.getenv('TOY_DATABASE_VERSION', '')
     selection = Path(os.getenv('TOY_STAGE_CONFIG', 'config/stages.json')).with_name('data.json')
     if not version and selection.exists():
@@ -71,3 +73,5 @@ if __name__ == '__main__':
     print(f'DATABASE SNAPSHOT: version {snapshot["version"]}; {len(snapshot["sets"])} synthetic sets; sha256 {digest}')
     if snapshot.get('quality_check'):
         print('DATA QUALITY: accepted incoming batch; rules sha256 ' + snapshot['quality_check']['rules_sha256'])
+
+    time.sleep(max(0, min(3, float(os.getenv("WORKSHOP_DATABASE_SECONDS", "0"))) - (time.monotonic()-started)))

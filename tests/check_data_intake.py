@@ -14,10 +14,10 @@ assert m.check(invalid)['accepted']
 print('QC: failed effort has a record-level correction; corrected submission passes.')
 
 # Exercise the real one-time correction, preserving the original rejected receipt.
-import os,sys,tempfile
+import os,sys,tempfile,shutil
 from unittest.mock import patch
 with tempfile.TemporaryDirectory() as folder:
-    work=Path(folder);(work/'supabase/functions/workshop-api').mkdir(parents=True)
+    work=Path(folder);shutil.copytree(root/'pipeline',work/'pipeline');(work/'supabase/functions/workshop-api').mkdir(parents=True)
     (work/'supabase/functions/workshop-api/batches.json').write_text(json.dumps({'2024':batch}))
     with patch.object(m,'ROOT',work),patch.dict(os.environ,{'WORKSHOP_INTAKE_MODE':'invalid'}),patch.object(m.time,'sleep'):
         def run(key):

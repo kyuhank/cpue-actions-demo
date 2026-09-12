@@ -51,8 +51,9 @@ jobs:
       TOY_STAGE_CONFIG: source-data/config/stages.json
       TOY_EXECUTION_MODE: parallel_steps
       TOY_DEMO_PACE_SECONDS: 0
-      WORKSHOP_GROUP_SECONDS: 2
-      WORKSHOP_INTAKE_SECONDS: 2
+      WORKSHOP_GROUP_SECONDS: 2.5
+      WORKSHOP_INTAKE_SECONDS: 2.5
+      WORKSHOP_DATABASE_SECONDS: 2.5
       WORKSHOP_INTAKE_MODE: ${{ inputs.intake_mode }}
       WORKSHOP_REQUEST_ID: ${{ inputs.request_id }}
       TOY_DATABASE_VERSION: ${{ inputs.data_version }}
@@ -116,7 +117,7 @@ jobs:
         run: |
           docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
             --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env TOY_CODE_COMMIT --env TOY_CONTAINER_IMAGE \
-            --env WORKSHOP_INTAKE_MODE --env WORKSHOP_REQUEST_ID --env SUPABASE_URL \
+            --env WORKSHOP_INTAKE_MODE --env WORKSHOP_INTAKE_SECONDS --env WORKSHOP_REQUEST_ID --env SUPABASE_URL \
             --env ACTIONS_ID_TOKEN_REQUEST_URL --env ACTIONS_ID_TOKEN_REQUEST_TOKEN \
             "$TOY_CONTAINER_IMAGE" python scripts/data_intake.py ingest
       - name: Fetch versioned database snapshot
@@ -124,7 +125,7 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
           docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
-            --env SUPABASE_URL --env SUPABASE_ANON_KEY --env TOY_DATABASE_VERSION --env TOY_SOURCE_DATABASE --env TOY_STAGE_CONFIG \
+            --env WORKSHOP_DATABASE_SECONDS --env SUPABASE_URL --env SUPABASE_ANON_KEY --env TOY_DATABASE_VERSION --env TOY_SOURCE_DATABASE --env TOY_STAGE_CONFIG \
             "$TOY_CONTAINER_IMAGE" python supabase/snapshot.py
           python3 -c 'import json,os,pathlib; v=json.loads(pathlib.Path(os.environ["TOY_SOURCE_DATABASE"]).with_suffix(".release.json").read_text())["version"]; open(os.environ["GITHUB_ENV"],"a").write(f"TOY_SOURCE_PROVIDER=supabase\nTOY_SOURCE_VERSION={v}\n")'
       - name: Restore and verify reusable outputs

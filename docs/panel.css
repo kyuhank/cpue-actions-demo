@@ -93,8 +93,11 @@
 .chain.executing .edge-label{opacity:.4}
 .chain.executing .stage:not(.running):not(.failed),.chain.executing .submission-node:not(.running):not(.needs-correction),.chain.executing .quality-gate:not(.running):not(.failed),.chain.executing .ingest-node:not(.running):not(.failed){opacity:.48;border-width:1px;box-shadow:none}
 .chain.executing .stage.blocked small{color:#6a8190}
-.chain.executing .data-node{opacity:.48;box-shadow:none}
-.chain.executing .database-body,.chain.executing .database-shape ellipse{stroke-width:1;stroke-dasharray:4 3}
+.chain.executing .data-node:not(.running){opacity:.48;box-shadow:none}
+.chain.executing .data-node:not(.running) .database-body,.chain.executing .data-node:not(.running) .database-shell ellipse{stroke-width:1;stroke-dasharray:4 3}
 .chain .edges>path.return-history{opacity:.22;stroke-width:1;animation:none}
 .chain .submission-node.running{opacity:1;box-shadow:0 0 0 3px #c58a2020;border-color:#bc8831;background:#fff3d9}
 .chain .submission-node.running strong{color:#946316}
+.chain .data-node.running{opacity:1;filter:drop-shadow(0 0 3px #bc883155)}
+.chain .data-node.running .database-body,.chain .data-node.running .database-shell ellipse{stroke:#bc8831;stroke-width:2.5;stroke-dasharray:none;fill:#fff3d9}
+.chain .data-node.running strong,.chain .data-node.running .release,.chain .data-node.running .qc{color:#946316}

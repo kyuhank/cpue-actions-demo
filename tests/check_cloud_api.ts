@@ -81,3 +81,12 @@ Deno.test('Compact groups preserve per-stage reuse and synchronise parallel stat
  equal(r.stages.find(s=>s.key==='prepare_vessel')?.status,'waiting');
  equal(r.intake_stages.find(s=>s.key==='qc')?.correction_phase,'resubmitting');
 });
+
+Deno.test('Database activity follows the real fetch step; live queries cannot select another repository',async()=>{
+ const run={id:1,run_attempt:1,run_number:1,status:'in_progress',display_title:'test',head_sha:'a'.repeat(40)};
+ const step:any={name:'Fetch versioned database snapshot',status:'in_progress',number:12};
+ const jobs=[{name:'Workshop demonstration · compact',steps:[step]}];
+ equal(mapRun(run,jobs).database_stage.status,'running');
+ step.status='completed';step.conclusion='success';equal(mapRun(run,jobs).database_stage.status,'completed');
+ for(const q of ['run=1&repo=private','run=../private','run=1&run=2','run=','run=abc'])equal((await handle(new Request(endpoint+'/api/live?'+q))).status,400);
+});

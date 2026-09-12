@@ -1,5 +1,5 @@
 import {acceptIntake,IntakePending} from './intake.ts';
-import {parseSelection,branchUpdates,runBranches,changeBranch,branches,change,changeable,current,consoleLines,stageLog,output,outputStage,outputNames,stageOutputs,ensureBranch,dispatch,outputKeys} from './github.ts';
+import {parseSelection,branchUpdates,runBranches,changeBranch,branches,change,changeable,current,liveRun,consoleLines,stageLog,output,outputStage,outputNames,stageOutputs,ensureBranch,dispatch,outputKeys} from './github.ts';
 import {rpc,cached,invalidate} from './database.ts';
 import {maintain,observe,pendingUpdate} from './lifecycle.ts';
 import batches from './batches.json' with {type:'json'};
@@ -22,7 +22,8 @@ async function status(){
   try{const files=await cached('intake:'+qcJob.source_id,600,()=>stageOutputs(qcJob.source_id));intake={quality_check:JSON.parse(files['quality.json']),first_quality_check:files['first-quality.json']?JSON.parse(files['first-quality.json']):null,correction:files['correction.json']?JSON.parse(files['correction.json']):null,published:s.intake_stages.some((j:any)=>j.key==='ingest'&&j.status==='completed'),checked_at:Date.parse(s.created_at)/1000};}catch{}
  }
  if(!s.has_run&&intake&&(intake.published||intake.checked_at*1000<=Date.parse(demo.last_reset_at||'1970-01-01')))intake=null;
- return {...s,demo,data_versions:database.version>=2024?[2021,2022,2023,2024]:[2021,2022,2023],latest_database_version:database.version,database_connected:true,data_intake:intake,session:{can_update:can,remaining:limits.remaining,next_update:limits.next_update,message:!enabled()?'Cloud execution is awaiting the owner’s restricted GitHub connection.':demo.phase==='cleaning'?'Resetting the demonstration. The next run will start from the baseline.':pending?'The update is stored; waiting for GitHub to acknowledge the next run.':limits.remaining===0?'Daily limit reached. You can still inspect the current run.':!can?'Wait for the current run and the short update interval.':`${limits.remaining} shared updates available today.`}};
+ const request=limits.last_request;const requested_roots=request?.result?.commit===s.commit?(['data','invalid'].includes(request.kind)?['data']:Object.keys(request.result.branches||{}).length?Object.keys(request.result.branches):[request.result.stage||request.kind]):[];
+ return {...s,requested_roots,demo,data_versions:database.version>=2024?[2021,2022,2023,2024]:[2021,2022,2023],latest_database_version:database.version,database_connected:true,data_intake:intake,session:{can_update:can,remaining:limits.remaining,next_update:limits.next_update,message:!enabled()?'Cloud execution is awaiting the owner’s restricted GitHub connection.':demo.phase==='cleaning'?'Resetting the demonstration. The next run will start from the baseline.':pending?'The update is stored; waiting for GitHub to acknowledge the next run.':limits.remaining===0?'Daily limit reached. You can still inspect the current run.':!can?'Wait for the current run and the short update interval.':`${limits.remaining} shared updates available today.`}};
 }
 export async function handle(request:Request){
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
@@ -41,6 +42,11 @@ export async function handle(request:Request){
   if(request.method==='GET'){
    if(path==='/api/presentation-info')return reply({presentation:'cpue-workshop',hosted:true,enabled:enabled()});
    if(path==='/api/status')return reply(await status());
+   if(path==='/api/live'){
+    const id=u.searchParams.get('run')||'';
+    if(!/^\d{1,20}$/.test(id)||[...u.searchParams.keys()].some(k=>k!=='run')||u.searchParams.getAll('run').length!==1)return reply({detail:'Choose a workshop run.'},400);
+    return reply(await cached('live:'+id,1,()=>liveRun(id)));
+   }
    if(path==='/api/branches')return reply(await cached('branches',10,branches));
    if(path==='/api/database'){
     const raw=u.searchParams.get('version');

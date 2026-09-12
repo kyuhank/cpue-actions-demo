@@ -69,7 +69,8 @@ export function mapRun(run:any,jobs:any[]){
    const name=({submission:'Data submission',qc:'QC submitted records',ingest:'Prepare and load accepted data'} as any)[String(key)];
    const start=qcSteps.find((s:any)=>s.name===name);
    const finish=key==='qc'&&recheck?.conclusion==='success'?recheck:start;
-   const continuing=key==='qc'&&(returned||correcting||rechecking);
+   const deciding=key==='qc'&&start?.conclusion==='success'&&returnStep&&['pending','queued'].includes(returnStep.status);
+   const continuing=key==='qc'&&(returned||correcting||rechecking||deciding);
    const state=continuing?'running':finish?.status==='in_progress'?'running':finish?.conclusion==='success'?'completed':finish?.conclusion==='failure'?'failed':finish?.conclusion==='skipped'?'not_requested':run.status==='completed'?'blocked':'waiting';
    return {key,parents,status:state,skipped:start?.conclusion==='skipped',correction_phase:key==='qc'?(returned?'returned':correcting?'resubmitting':rechecking?'rechecking':recheck?.conclusion==='success'?'corrected':null):null,source_id:`${run.id}-${run.run_attempt}-${key}`,_job_id:physical?.id,_step_number:start?.number,html_url:physical?.html_url};
   }
@@ -81,7 +82,9 @@ export function mapRun(run:any,jobs:any[]){
   }
   return {key,parents,correction_phase:key==='qc'?(returned?'returned':correcting?'resubmitting':rechecking?'rechecking':recheck?.conclusion==='success'?'corrected':null):null,status,skipped:job?.conclusion==='skipped',source_id:`${run.id}-${run.run_attempt}-${key}`,_job_id:job?.id,html_url:job?.html_url};
  });
- return {ready:true,has_run:true,stages,intake_stages,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
+ const databaseStep=steps.find((s:any)=>s.name==='Fetch versioned database snapshot');
+ const database_stage={status:databaseStep?.status==='in_progress'?'running':databaseStep?.conclusion==='success'?'completed':databaseStep?.conclusion==='failure'?'failed':'waiting',started_at:databaseStep?.started_at,completed_at:databaseStep?.completed_at};
+ return {ready:true,has_run:true,stages,intake_stages,database_stage,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
  trigger_message:run.display_title.startsWith('Database version ')?run.display_title:(run.head_commit?.message||run.display_title).split('\n')[0].slice(0,160),database_version:/^Database version 20\d{2}$/.test(run.display_title)?Number(run.display_title.slice(-4)):null,
  execution:{mode:distributed?'module_jobs':grouped?'grouped_steps':'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};
 }
@@ -128,6 +131,12 @@ export async function branches(){
  const branch=await github('git/ref/heads/'+DEMO_BRANCH,'GET',undefined,true);
  const head=branch.ok?await branch.json():await json('git/ref/heads/main');
  return moduleConfiguration(head.object.sha);
+}
+export async function liveRun(id:string){
+ if(!/^\d{1,20}$/.test(id))throw Error('Invalid run identifier.');
+ const [run,jobs]=await Promise.all([json('actions/runs/'+id),json('actions/runs/'+id+'/jobs?per_page=100')]);
+ if(run.path!=='.github/workflows/update.yml')throw Error('Not a workshop run.');
+ return mapRun(run,jobs.jobs);
 }
 export async function current(){const runs=(await json('actions/workflows/update.yml/runs?per_page=1')).workflow_runs;
  if(!runs.length)return emptyRun();const r=runs[0];const [jobs,sources]=await Promise.all([json(`actions/runs/${r.id}/attempts/${r.run_attempt}/jobs?per_page=100`),runModules(r)]);

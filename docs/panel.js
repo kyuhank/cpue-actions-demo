@@ -7,6 +7,7 @@ let qualityRecordOpen=false,qualityAlertStamp=null;
 let previewLog=null,previewLogPending=false,previewLogAt=0;
 let dataDraft=null;
 let branchCatalog=null,branchLoading=false,runRoots=null;const branchDrafts={};
+let pendingRun=null,liveRefreshing=false,lastLive=0;
 let data=null,sending=false,expected='',selected=null,consoleRecord=null,consolePending=false,changeKind='data',lastRefresh=0,refreshing=false,previewKey=null,previewTimer=null;
 const time=t=>t?new Date(t).toLocaleTimeString('en-GB',{hour12:false}):'';
 const selectedKey=()=>selected||'data';
@@ -125,10 +126,11 @@ function roundedRoute(points,radius=6){
  }
  return d+`L${clean.at(-1).join(',')}`;
 }
+const databaseActive=()=>data?.database_stage?.status==='running'&&(data.requested_roots?.length?data.requested_roots:runRoots||[selectedKey()]).some(k=>['data','extract'].includes(k));
 function qualityStatus(){
  const actual=data?.intake_stages?.find(j=>j.key==='qc');if(actual&&!actual.skipped)return actual.correction_phase==='corrected'?'completed':['returned','resubmitting'].includes(actual.correction_phase)?'failed':actual.status;
  const q=data?.data_intake?.quality_check;
- return sending&&changeKind==='data'?'running':q?(q.accepted?'completed':'failed'):'waiting';
+ return q?(q.accepted?'completed':'failed'):'waiting';
 }
 function drawQuality(){
  let gate=$('quality-gate');if(!gate){
@@ -196,7 +198,7 @@ function links(){
   const band=document.createElementNS(ns,'rect');band.dataset.module=first;for(const [k,v] of Object.entries({x:a.left-rect.left-4,y:-17,width:b.right-a.left+8,height:rect.height+29,rx:9,fill,stroke,'stroke-width':1}))band.setAttribute(k,v);svg.append(band);
  }
 
- const all=[{key:'qc',parents:['submission'],status:qualityStatus()},{key:'ingest',parents:['qc'],status:stages.get('ingest')?.status},{key:'data',parents:['ingest']},...data.stages.map(s=>s.key==='extract'?{...s,parents:['data']}:s)];
+ const all=[{key:'qc',parents:['submission'],status:qualityStatus()},{key:'ingest',parents:['qc'],status:stages.get('ingest')?.status},{key:'data',parents:['ingest'],status:data.database_stage?.status},...data.stages.map(s=>s.key==='extract'?{...s,parents:['data']}:s)];
  for(const child of all.filter(s=>!['cpue_summary','cpue_report'].includes(s.key)))for(const parent of child.parents||[]){
   const a=root.querySelector(`[data-key="${parent}"]`)?.getBoundingClientRect(),b=root.querySelector(`[data-key="${child.key}"]`)?.getBoundingClientRect();if(!a||!b)continue;
   const inPath=impact.has(child.key)&&impact.has(parent),reusedInput=child.reused||stages.get(parent)?.reused;
@@ -253,9 +255,9 @@ async function loadConsole(){if(data.has_run===false||consolePending||data.statu
 function notice(text){$('notice-text').textContent=text;$('notice').hidden=false;}
 function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),active=steps.find(s=>s.status==='in_progress'),reused=data.stages.filter(s=>s.reused).length,busy=sending||!!expected||data.status!=='completed',stale=data.source?.stale,cloudBlocked=data.session&&!data.session.can_update;
  $('chain').classList.toggle('executing',busy);
- $('run-link').textContent=data.has_run===false?'Ready':'Run #'+data.number;$('run-link').href=data.run_url;$('run-state').textContent=data.demo?.phase==='cleaning'?'Resetting…':data.has_run===false?'Ready for a fresh demonstration':stale?'Last verified state':expected?'New run pending':data.status==='completed'?(data.conclusion==='success'?'Complete · '+(data.stages.length-reused+(data.intake_stages||[]).filter(j=>!j.skipped).length)+' run · '+reused+' reused':data.conclusion):data.stages.filter(s=>s.status==='running').length>1?data.stages.filter(s=>s.status==='running').length+' analyses running in parallel':data.status.replaceAll('_',' ');$('live-dot').className='dot '+(busy?'live':data.conclusion==='success'?'success':'');
+ $('run-link').textContent=pendingRun?'Preparing run…':data.has_run===false?'Ready':'Run #'+data.number;$('run-link').href=data.run_url;$('run-state').textContent=pendingRun?'Starting the selected workflow':data.demo?.phase==='cleaning'?'Resetting…':data.has_run===false?'Ready for a fresh demonstration':stale?'Last verified state':expected?'New run pending':data.status==='completed'?(data.conclusion==='success'?'Complete · '+(data.stages.length-reused+(data.intake_stages||[]).filter(j=>!j.skipped).length)+' run · '+reused+' reused':data.conclusion):data.stages.filter(s=>s.status==='running').length>1?data.stages.filter(s=>s.status==='running').length+' analyses running in parallel':data.status.replaceAll('_',' ');$('live-dot').className='dot '+(busy?'live':data.conclusion==='success'?'success':'');
  const source=node('data'),dataImpacted=selected==='data'||impact.has('data'),dataRetained=!!data.has_run&&(data.intake_stages? !data.intake_stages.some(j=>j.key==='ingest'&&!j.skipped&&j.status!=='not_requested'):data.stages.some(j=>j.key==='extract'&&j.reused));
- source.classList.toggle('impacted',!!selected&&dataImpacted);source.classList.toggle('outside-impact',!!selected&&!dataImpacted);source.classList.toggle('reused',!dataImpacted&&(!!selected||dataRetained));source.classList.toggle('selected',selected==='data');source.querySelector('.node-control').setAttribute('aria-pressed',String(selected==='data'));const qc=data.data_intake?.quality_check,version=(data.intake_stages?.some(j=>j.key==='submission'&&!j.skipped)&&!data.intake_stages?.some(j=>j.key==='ingest'&&j.status==='completed')?data.latest_database_version:data.database_version)||(data.data_intake?.published?qc?.proposed_version:null);source.querySelector('.release').textContent=version?'v'+version:'Versioned data';source.querySelector('.qc').textContent=sending&&changeKind==='data'?'Checking QC…':qc?(qc.accepted?'✓ QC passed':'× QC failed'):'QC before release';if(Number(version)>=2024&&(!qc||qc.accepted))source.querySelector('.qc').textContent='✓ One added batch';source.querySelector('.qc').classList.toggle('failed',!!qc&&!qc.accepted);
+ source.classList.toggle('running',databaseActive());source.classList.toggle('completed',data.database_stage?.status==='completed');source.classList.toggle('impacted',!!selected&&dataImpacted);source.classList.toggle('outside-impact',!!selected&&!dataImpacted);source.classList.toggle('reused',!dataImpacted&&(!!selected||dataRetained));source.classList.toggle('selected',selected==='data');source.querySelector('.node-control').setAttribute('aria-pressed',String(selected==='data'));const qc=data.data_intake?.quality_check,version=(data.intake_stages?.some(j=>j.key==='submission'&&!j.skipped)&&!data.intake_stages?.some(j=>j.key==='ingest'&&j.status==='completed')?data.latest_database_version:data.database_version)||(data.data_intake?.published?qc?.proposed_version:null);source.querySelector('.release').textContent=version?'v'+version:'Versioned data';source.querySelector('.qc').textContent=sending&&changeKind==='data'?'Awaiting submission':qc?(qc.accepted?'✓ QC passed':'× QC failed'):'QC before release';if(Number(version)>=2024&&(!qc||qc.accepted))source.querySelector('.qc').textContent='✓ One added batch';source.querySelector('.qc').classList.toggle('failed',!!qc&&!qc.accepted);if(databaseActive())source.querySelector('.qc').textContent='Verifying release…';
  for(const s of data.stages){const el=node(s.key),state=expected?(impact.has(s.key)||!selected?'waiting':s.status):s.status;el.className='stage '+state+(s.reused&&!expected?' reused':'')+(selected&&impact.has(s.key)?' impacted':'')+(selected&&!impact.has(s.key)?' outside-impact':'')+(selected===s.key?' selected':'');el.querySelector('.state-icon').textContent=s.reused&&!expected?'↺':icons[state]||'·';el.querySelector('.state-label').textContent=s.reused&&!expected?'Reused':states[state]||state;el.querySelector('.node-control').setAttribute('aria-pressed',String(selected===s.key));el.title=(s.parents.length?'Inputs: '+s.parents.map(p=>names[p]).join(' + '):'Input: accepted database release')+' · select to update downstream';}
  const submittingData=key==='data'&&(!dataDraft||dataDraft==='new');
  const count=(selected?data.stages.filter(s=>impact.has(s.key)).length:data.stages.length)+(submittingData?3:0),pendingCount=plannedRoots().length,replayData=key==='data'&&Number(data.database_version)>=2024;
@@ -266,7 +268,7 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  if(key==='data'){const choices=[...(data.data_versions||[2023]).map(v=>[String(v),'Release '+v]),['new','Submit example data']];const signature=JSON.stringify(choices);if($('data-version').dataset.choices!==signature){$('data-version').replaceChildren(...choices.map(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;return option;}));$('data-version').dataset.choices=signature;}$('data-version').value=dataDraft||'new';}
  $('sql-button').hidden=key!=='extract';$('sql-button').disabled=!nextSource('extract');
  drawBranches(key,busy);
- $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?'Submit example data →':pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()==='failed'&&!busy){$('selection-title').textContent='Retry data submission';$('run').textContent='Retry submission →';}
+ $('run').disabled=busy||!!stale||!!cloudBlocked;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?'Submit example data →':pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()==='failed'&&!busy){$('selection-title').textContent='Retry data submission';$('run').textContent='Retry submission →';}
  if(submittingData&&qualityStatus()!=='failed'&&!busy){$('selection-title').textContent='Data submission';$('progress').textContent='QC returns once → provider correction and resubmission → full workflow';$('run').textContent='Submit example data →';}
  if(key==='data'&&dataDraft&&dataDraft!=='new'){$('selection-title').textContent='Data release '+dataDraft;$('progress').textContent='Use this snapshot → 13 analysis stages';$('run').textContent=busy?'Starting…':'Run with v'+dataDraft+' →';}
  $('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||dataDraft!=='new'||!data.database_connected;$('invalid').disabled=busy||!!stale;
@@ -277,7 +279,7 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  if(cloudBlocked&&!busy&&!stale){$('message').textContent=data.session.message.includes('owner')?'Viewing only · owner GitHub connection needed':data.session.message;$('message').className='read-only';}
  if(data.intake_stages?.some(j=>j.correction_phase==='resubmitting')){$('message').textContent='QC returned the example → provider correction and resubmission';}else if(data.intake_stages?.some(j=>j.correction_phase==='rechecking')){$('message').textContent='Corrected example submitted → checking again';}
  if(qc&&!qc.accepted&&!busy){$('message').textContent='QC failed on GitHub · returned to Korea · loading and extraction blocked';}
- narrate();drawQuality();drawCpueProducts();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
+ narrate();if(cloudBlocked&&!busy&&!stale&&data.session.next_update){const wait=Math.max(0,Math.ceil((Date.parse(data.session.next_update)-Date.now())/1000));if(wait){$('run').textContent='Run again in '+wait+' s';$('message').textContent='Run complete. The next run is available in '+wait+' seconds.';}else if(data.session.remaining>0&&!data.session.message.includes('owner')){$('run').textContent='Checking readiness…';}}drawQuality();drawCpueProducts();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
 function narrate(){
  const record=document.querySelector('.record'),qcJob=data.intake_stages?.find(j=>j.key==='qc'),phase=qcJob?.correction_phase;
  const running=data.stages.filter(s=>s.status==='running'),intake=data.intake_stages?.find(j=>j.status==='running'&&!j.skipped);
@@ -291,6 +293,7 @@ function narrate(){
  else if(phase==='resubmitting'){message='Resubmit: the provider’s corrected file is sent back for QC.';record.dataset.phase='correction';}
  else if(phase==='rechecking'){message='Corrected records resubmitted → checking them again.';record.dataset.phase='correction';}
  else if(intake)message=intake.key==='qc'&&phase==='corrected'?'QC passed on the second check. Saving the accepted submission.':labels[intake.key];
+ else if(databaseActive())message='Database: retrieving and verifying the accepted data release.';
  else if(running.length>1){const cpue=running.filter(s=>['cpue_vessel','cpue_year'].includes(s.key)).length,assess=running.filter(s=>s.key.startsWith('assessment_')).length;message=cpue>1?'Running the two CPUE analyses in parallel.':assess>1?'Running '+assess+' assessment models in parallel.':running.length+' independent jobs are running; dependent jobs wait for their inputs.';}
  else if(running.length){const key=running[0].key;message=labels[key]||(key.startsWith('assessment_')?'Fitting '+names[key].toLowerCase()+' using CPUE '+(key.includes('vessel')?'A':'B')+'.':'Running the selected analysis.');}
  else if(data.has_run===false)message='Select a starting stage. Run it and its dependent jobs.';
@@ -300,7 +303,51 @@ function narrate(){
  if(message)$('message').textContent=message;
  if(data.demo?.reset_at&&data.status==='completed'){const sec=Math.max(0,Math.ceil((Date.parse(data.demo.reset_at)-Date.now())/1000));$('verified').textContent='Resets in '+Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');}
 }
-async function refresh(force=false){if(window.workshopActive===false||refreshing)return;if(!force&&data?.status==='completed'&&!expected&&Date.now()-lastRefresh<10000)return;refreshing=true;lastRefresh=Date.now();try{const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw Error();const next=await r.json();if(!next.ready)throw Error();data=next;if(data.has_run===false&&!expected){consoleRecord=null;$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}if(expected===data.commit||(data.database_version&&expected==='db-'+data.database_version)){expected='';loadBranches();}draw();}catch{$('message').textContent='Live connection unavailable · retrying';$('run').disabled=true;}finally{refreshing=false;}}
+// Merge only observations of the same run; an older cached response cannot rewind it.
+function observeRun(next){
+ if(pendingRun){
+  if(!next.has_run||Number(next.run_id)<=Number(pendingRun.previous||0))return false;
+  if(expected&&next.commit!==expected)return false;
+  pendingRun=null;expected='';consoleRecord=null;loadBranches();
+ }
+ if(data?.run_id&&next.run_id&&Number(next.run_id)<Number(data.run_id))return false;
+ if(data?.run_id===next.run_id&&data?.attempt===next.attempt){
+  const rank={waiting:0,idle:0,not_requested:2,running:1,completed:2,failed:2,blocked:2,cancelled:2};
+  const merge=(old,value)=>({...old,...value,...((rank[old?.status]||0)>(rank[value.status]||0)?{status:old.status,reused:old.reused}:{}),code_source:value.code_source||old?.code_source});
+  next.stages=next.stages.map(value=>merge(data.stages.find(s=>s.key===value.key),value));
+  const phases=[null,'returned','resubmitting','rechecking','corrected'];
+  next.intake_stages=(next.intake_stages||[]).map(value=>{
+   const old=data.intake_stages?.find(s=>s.key===value.key);
+   if(value.key==='qc'&&phases.indexOf(old?.correction_phase||null)>phases.indexOf(value.correction_phase||null))return old;
+   return value.key==='qc'&&value.correction_phase?{...old,...value}:merge(old,value);
+  });
+  if(next.database_stage)next.database_stage=merge(data.database_stage,next.database_stage);
+  if(data.status==='completed'&&next.status!=='completed'){next.status=data.status;next.conclusion=data.conclusion;}
+ }
+ data=next;return true;
+}
+async function refresh(force=false){
+ if(window.workshopActive===false||refreshing||sending)return;
+ const interval=pendingRun||sending||expected?750:data?.status!=='completed'?6000:data?.session&&!data.session.can_update?1000:10000;
+ if(!force&&Date.now()-lastRefresh<interval)return;
+ refreshing=true;lastRefresh=Date.now();
+ try{
+  const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw Error();const next=await r.json();if(!next.ready)throw Error();
+  if(!observeRun(next))return;
+  if(data.has_run===false&&!pendingRun){consoleRecord=null;$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}
+  draw();
+ }catch{$('message').textContent='Live connection unavailable · retrying';$('run').disabled=true;}finally{refreshing=false;}
+}
+async function refreshLive(){
+ if(window.workshopActive===false||liveRefreshing||pendingRun||sending||!data?.has_run||data.status==='completed'||Date.now()-lastLive<450)return;
+ liveRefreshing=true;lastLive=Date.now();const id=data.run_id;
+ try{
+  const r=await fetch('/api/live?run='+id,{cache:'no-store'});if(!r.ok)return;const live=await r.json();
+  if(!live.ready||data.run_id!==id||pendingRun)return;
+  const next={...data,...live,database_version:live.database_version||data.database_version};
+  if(observeRun(next))draw();if(live.status==='completed')await refresh(true);
+ }catch{}finally{liveRefreshing=false;}
+}
 function drawBranches(key,busy){
  const choices=branchCatalog?.options[key]||{},entries=Object.entries(choices),picker=$('branch');
  $('branch-picker').hidden=key==='data'||!entries.length;if(!entries.length)return;
@@ -362,13 +409,16 @@ async function publish(invalid=false){
  const stage=selectedKey(),choices=pendingBranches();
  if(stage!=='data'&&branchCatalog?.options[stage])choices[stage]=$('branch').value;
  if(!invalid&&!branchCatalog){notice('Loading registered branches. Please try again in a moment.');loadBranches();return;}
- qualityRecordOpen=false;runRoots=[...new Set([dataDraft&&dataDraft!=='new'&&Number(dataDraft)!==Number(data.database_version)?'data':stage,...Object.keys(choices)])];hidePreview();sending=true;changeKind=stage;$('notice').hidden=true;draw();
+ const previous=structuredClone(data);
+ qualityRecordOpen=false;runRoots=[...new Set([dataDraft&&dataDraft!=='new'&&Number(dataDraft)!==Number(data.database_version)?'data':stage,...Object.keys(choices)])];hidePreview();sending=true;changeKind=stage;pendingRun={previous:data.run_id};expected='';
+ data={...data,has_run:false,run_id:null,run_url:'',status:'queued',conclusion:null,execution:{jobs:[]},data_intake:null,database_stage:{status:'waiting'},intake_stages:[],stages:data.stages.map(s=>({...s,status:'waiting',reused:false})),session:{...data.session,can_update:false}};
+ $('notice').hidden=true;draw();
  try{
   const r=await fetch(invalid?'/api/check-invalid-data':'/api/run',{method:'POST',headers:{'Content-Type':'application/json','X-Workshop-Action':'publish-synthetic-data','X-Workshop-Request':crypto.randomUUID()},body:invalid?'{}':JSON.stringify({start:stage,branches:choices,...(dataDraft&&dataDraft!=='new'?{data_version:Number(dataDraft)}:{})})}),result=await r.json();
   if(!r.ok)throw Error(result.detail||'Update failed');
   expected=result.published===false?'':result.commit||(result.database_version?'db-'+result.database_version:'');
-  if(result.published===false){$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}
- }catch(e){notice(e.message);}finally{sending=false;draw();await refresh(true);}
+  if(result.published===false){pendingRun=null;data=previous;$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}
+ }catch(e){pendingRun=null;expected='';data=previous;notice(e.message);}finally{sending=false;draw();await refresh(true);}
 }
 $('sql-close').onclick=()=>$('sql-view').close();
 $('sql-button').onclick=async()=>{
@@ -386,6 +436,6 @@ $('sql-button').onclick=async()=>{
 };
 $('data-version').onchange=()=>{dataDraft=$('data-version').value;draw();};
  $('run').onclick=()=>publish(selectedKey()==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()!=='failed');$('invalid').onclick=()=>publish(true);$('logs').onclick=()=>{qualityRecordOpen=false;$('console').hidden=!$('console').hidden;$('logs').setAttribute('aria-expanded',String(!$('console').hidden));$('logs').textContent=$('console').hidden?'Show record':'Hide record';showConsole();};$('dismiss').onclick=()=>{$('notice').hidden=true;};
-if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');refresh();loadBranches();setInterval(refresh,1000);
+if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');refresh();loadBranches();setInterval(()=>{refresh();refreshLive();if(data?.status==='completed'&&!data?.session?.can_update)draw();},250);
 async function heartbeat(){try{const r=await fetch('/api/presentation-info',{cache:'no-store'});if(r.ok&&(await r.json()).presentation==='cpue-workshop'&&parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');}catch{}}
 heartbeat();setInterval(heartbeat,4000);

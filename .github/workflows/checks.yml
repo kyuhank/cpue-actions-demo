@@ -32,3 +32,5 @@ jobs:
         run: python3 tests/check_branch_selection.py
       - name: Verify synchronised stage groups and artifact checks
         run: python3 tests/check_stage_barrier.py
+      - name: Verify the compact runner and result pages
+        run: python3 tests/check_compact_groups.py

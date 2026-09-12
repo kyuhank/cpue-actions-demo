@@ -42,11 +42,12 @@ export async function json(path:string){return (await github(path)).json();}
 export function mapRun(run:any,jobs:any[]){
  const distributed=jobs.some(j=>/\[(?:plan|extract)\]/.test(j.name));
  const physical=distributed?jobs.find(j=>j.name.includes('[plan]')):jobs[0], steps=physical?.steps||[], states:Record<string,string>={};
+ const grouped=!distributed&&physical?.name?.endsWith('Workshop demonstration · compact');
  const restored=steps.some((s:any)=>s.name==='Restore and verify reusable outputs'&&s.conclusion==='success');
  const stages=definitions.map(([key,label,parents])=>{
   const job=distributed?jobs.find(j=>j.name.includes('['+key+']')):physical;
-  const step=distributed?job?.steps?.find((s:any)=>s.name==='Run module'):steps.find((s:any)=>s.name.replace(/ · reused$/,'').replace(/ \(0\.\d+\)/,'')===label);
-  const reused=distributed?job?.conclusion==='skipped'&&job.name.includes('· reused'):!!step&&step.name.endsWith(' · reused')&&step.conclusion==='skipped'&&restored;
+  const step=distributed?job?.steps?.find((s:any)=>s.name==='Run module'):grouped?steps.find((s:any)=>s.name.includes('['+key+'=')||s.name.includes(' '+key+'=')):steps.find((s:any)=>s.name.replace(/ · reused$/,'').replace(/ \(0\.\d+\)/,'')===label);
+  const reused=distributed?job?.conclusion==='skipped'&&job.name.includes('· reused'):grouped?!!step&&step.name.includes(key+'=reuse')&&restored:!!step&&step.name.endsWith(' · reused')&&step.conclusion==='skipped'&&restored;
   let state=reused?'completed':step?.status==='in_progress'?'running':step?.status==='completed'?({success:'completed',failure:'failed',cancelled:'cancelled',skipped:'blocked',timed_out:'failed'} as any)[step.conclusion]||'blocked':run.status==='completed'?'blocked':restored&&parents.every(p=>states[p]==='completed')?'idle':'waiting';
   if(distributed)state=reused?'completed':job?.status==='in_progress'?'running':job?.status==='completed'?({success:'completed',failure:'failed',cancelled:'cancelled',skipped:'blocked',timed_out:'failed'} as any)[job.conclusion]||'blocked':run.status==='completed'?'blocked':'waiting';
   // Warm runners can prepare software while the previous group is still running.
@@ -55,7 +56,7 @@ export function mapRun(run:any,jobs:any[]){
   states[key]=state;
   return {key,label:label.slice(3),parents,status:state,reused,source_id:`${run.id}-${run.run_attempt}-${key}`,started_at:distributed?job?.started_at:step?.started_at,completed_at:distributed?job?.completed_at:step?.completed_at,html_url:job?.html_url,_job_id:job?.id,_step_number:step?.number};
  });
- const qcSteps=jobs.find(j=>j.name?.includes('[qc]'))?.steps||[];
+ const qcSteps=(grouped?physical:jobs.find(j=>j.name?.includes('[qc]')))?.steps||[];
  const correction=qcSteps.find((s:any)=>s.name==='Correct and resubmit example'),recheck=qcSteps.find((s:any)=>s.name==='Recheck corrected submission');
  const initial=qcSteps.find((s:any)=>s.name==='QC submitted records');
  const returnStep=qcSteps.find((s:any)=>s.name==='Return failed submission');
@@ -63,7 +64,15 @@ export function mapRun(run:any,jobs:any[]){
  const correcting=correction&&correction.status==='in_progress';
  const rechecking=correction?.conclusion==='success'&&recheck?.conclusion!=='success';
  const intake_stages=[['submission',[]],['qc',['submission']],['ingest',['qc']]].map(([key,parents])=>{
-  const job=jobs.find(j=>j.name?.includes('['+key+']'));
+  let job=jobs.find(j=>j.name?.includes('['+key+']'));
+  if(grouped){
+   const name=({submission:'Data submission',qc:'QC submitted records',ingest:'Prepare and load accepted data'} as any)[String(key)];
+   const start=qcSteps.find((s:any)=>s.name===name);
+   const finish=key==='qc'&&recheck?.conclusion==='success'?recheck:start;
+   const continuing=key==='qc'&&(returned||correcting||rechecking);
+   const state=continuing?'running':finish?.status==='in_progress'?'running':finish?.conclusion==='success'?'completed':finish?.conclusion==='failure'?'failed':finish?.conclusion==='skipped'?'not_requested':run.status==='completed'?'blocked':'waiting';
+   return {key,parents,status:state,skipped:start?.conclusion==='skipped',correction_phase:key==='qc'?(returned?'returned':correcting?'resubmitting':rechecking?'rechecking':recheck?.conclusion==='success'?'corrected':null):null,source_id:`${run.id}-${run.run_attempt}-${key}`,_job_id:physical?.id,_step_number:start?.number,html_url:physical?.html_url};
+  }
   let status=job?.status==='in_progress'?'running':job?.conclusion==='success'?'completed':job?.conclusion==='failure'?'failed':job?.conclusion==='skipped'?(jobs.some(j=>j.name?.includes('[submission]')&&j.conclusion==='skipped')?'not_requested':'blocked'):'waiting';
   const barrier=job?.steps?.find((s:any)=>s.name==='Wait for accepted upstream records');
   if(status==='running'&&['qc','ingest'].includes(String(key))){
@@ -74,7 +83,7 @@ export function mapRun(run:any,jobs:any[]){
  });
  return {ready:true,has_run:true,stages,intake_stages,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
  trigger_message:run.display_title.startsWith('Database version ')?run.display_title:(run.head_commit?.message||run.display_title).split('\n')[0].slice(0,160),database_version:/^Database version 20\d{2}$/.test(run.display_title)?Number(run.display_title.slice(-4)):null,
- execution:{mode:distributed?'module_jobs':'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};
+ execution:{mode:distributed?'module_jobs':grouped?'grouped_steps':'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};
 }
 export function emptyRun(){return {ready:true,has_run:false,baseline_available:true,stages:definitions.map(([key,label,parents])=>({key,label:label.slice(3),parents,status:'waiting',reused:false,source_id:'',_step_number:null})),run_id:null,number:null,attempt:null,run_url:'',commit:'',status:'completed',conclusion:'success',database_version:2023,execution:{mode:'steps',job_count:0,jobs:[]},source:{stale:false,last_success:new Date().toISOString()},created_at:null,completed_at:null};}
 type ModuleSource={repository:string,branch:string,commit:string};
@@ -126,9 +135,9 @@ export async function current(){const runs=(await json('actions/workflows/update
 }
 export async function ensureBranch(){
  const existing=await github('git/ref/heads/'+DEMO_BRANCH,'GET',undefined,true);
- if(existing.ok)return;
+ if(existing.ok)return (await existing.json()).object.sha;
  const base=await json('git/ref/heads/main');
- await github('git/refs','POST',{ref:'refs/heads/'+DEMO_BRANCH,sha:base.object.sha});
+ await github('git/refs','POST',{ref:'refs/heads/'+DEMO_BRANCH,sha:base.object.sha});return base.object.sha;
 }
 export async function dispatch(version?:number,intakeMode='none',request=''){
  await ensureBranch();
@@ -186,7 +195,14 @@ export async function stageOutputs(source:string){
   return result;
  }
  const entries=unzipSync(bytes,{filter:f=>wanted.has(f.name)&&f.originalSize<=2*1024*1024});
- return Object.fromEntries([...wanted].filter(([path])=>entries[path]).map(([path,name])=>[name,new TextDecoder().decode(entries[path])]));
+ const result=Object.fromEntries([...wanted].filter(([path])=>entries[path]).map(([path,name])=>[name,new TextDecoder().decode(entries[path])]));
+ if(!result['record.json'])throw Error('This job has no completed output record yet.');
+ const record=JSON.parse(result['record.json']);if(record.stage!==id[3]||!record.completed_at)throw Error('Job outputs are incomplete.');
+ for(const [name,text] of Object.entries(result))if(name!=='record.json'){
+  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join('');
+  if(record.outputs?.[name]!==hash)throw Error('Job output checksum mismatch.');
+ }
+ return result;
 }
 export async function output(source:string,file:string){
  const id=outputStage(source);if(!id||!outputNames(id[3]).includes(file))throw Error('Unknown output.');
@@ -237,9 +253,7 @@ export function branchUpdates(start:string,choices:Record<string,string>,availab
  return result;
 }
 export async function runBranches(start:string,choices:Record<string,string>,request:string,submit=true,dataVersion?:number){
- branchUpdates(start,choices,await branches());
- await ensureBranch();
- const head=(await json('git/ref/heads/'+DEMO_BRANCH)).object.sha;
+ const head=await ensureBranch();
  // Resolve the complete selection against the exact caller's trusted catalog.
  const updates=branchUpdates(start,choices,await moduleConfiguration(head));
  if(!Object.keys(updates).length)return {stage:start,branches:{},commit:head,url:`https://github.com/${REPO}/commit/${head}`};
@@ -281,7 +295,7 @@ export async function stageLog(status:any,key:string){
    const log=new TextDecoder().decode(await download(await github(`actions/jobs/${job.id}/logs`),8*1024*1024));
    const keep=/SUBMISSION complete:|QC |PREPARE:|LOAD complete:|CPUE SUMMARY complete:|CPUE REPORT complete:|SOURCE:|DATA: release|INPUTS:|OUTPUTS:|Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:|REPRODUCIBILITY:|ERROR|Error:|ValueError:/;
    let lines=log.split('\n').filter(x=>keep.test(x)&&!x.includes('##[group]')).map(x=>x.replace(/^(\S+)\s*/,(_,t)=>stamp(t)+'  ').slice(0,240));
-   if(status.execution.mode==='steps'){
+   if(['steps','grouped_steps'].includes(status.execution.mode)){
     const tags:Record<string,string>={extract:'EXTRACT complete:',cpue_vessel:'vessel_adjusted',cpue_year:'year_only',prepare_vessel:'INPUT PREPARATION complete:',prepare_year:'INPUT PREPARATION complete:',synthesis:'SYNTHESIS complete:',report:'REPORT complete:'};
     lines=lines.filter(x=>x.includes(tags[key]||key));
    }
@@ -289,7 +303,7 @@ export async function stageLog(status:any,key:string){
   }catch{/* Preserve the actual step record if the downloadable log is delayed. */}
  }
  let steps=(job.steps||[]).filter((s:any)=>s.started_at&&s.name!=='Complete job'&&!s.name.startsWith('Post '));
- if(status.execution.mode==='steps'&&key!=='extract')steps=steps.filter((s:any)=>s.number===stage._step_number);
+ if(['steps','grouped_steps'].includes(status.execution.mode)&&key!=='extract')steps=steps.filter((s:any)=>s.number===stage._step_number);
  const lines=steps.slice(-3).map((s:any)=>stamp(s.started_at)+'  '+(s.status==='in_progress'?'▶ ':s.conclusion==='success'?'✓ ':'× ')+s.name.replace('Prepare the pinned Docker environment','Start container'));
  return {...base,lines:lines.length?lines:['Waiting for dependency outputs.']};
 }

@@ -18,7 +18,7 @@ async function status(){
   }catch{/* The run state remains available while the report is being published. */}
  }
  const qcJob=s.intake_stages?.find((j:any)=>j.key==='qc');
- if(qcJob&&['completed','failed'].includes(qcJob.status)){
+ if(qcJob&&['completed','failed'].includes(qcJob.status)&&(s.execution.mode!=='grouped_steps'||s.status==='completed')){
   try{const files=await cached('intake:'+qcJob.source_id,600,()=>stageOutputs(qcJob.source_id));intake={quality_check:JSON.parse(files['quality.json']),first_quality_check:files['first-quality.json']?JSON.parse(files['first-quality.json']):null,correction:files['correction.json']?JSON.parse(files['correction.json']):null,published:s.intake_stages.some((j:any)=>j.key==='ingest'&&j.status==='completed'),checked_at:Date.parse(s.created_at)/1000};}catch{}
  }
  if(!s.has_run&&intake&&(intake.published||intake.checked_at*1000<=Date.parse(demo.last_reset_at||'1970-01-01')))intake=null;

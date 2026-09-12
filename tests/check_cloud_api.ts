@@ -62,3 +62,22 @@ Deno.test('Runner allocation without step metadata never marks downstream comput
  const r=mapRun({id:123,run_attempt:1,status:'in_progress',display_title:'Demo'},[{name:'[plan]',status:'completed',conclusion:'success'},{name:'[report]',status:'in_progress',steps:[]}]);
  if(r.stages.some(s=>s.status==='running'))throw Error('Setup must remain waiting');
 });
+
+Deno.test('Compact groups preserve per-stage reuse and synchronise parallel statuses',()=>{
+ const run={id:1,run_attempt:1,status:'in_progress',display_title:'Demo'};
+ const steps=[{name:'Restore and verify reusable outputs',status:'completed',conclusion:'success'},
+ {name:'Extract [extract=reuse]',status:'completed',conclusion:'success'},
+ {name:'CPUE analyses [cpue_vessel=run cpue_year=reuse]',status:'in_progress'},
+ {name:'QC submitted records',status:'completed',conclusion:'success'},
+ {name:'Return failed submission',status:'completed',conclusion:'success'},
+ {name:'Correct and resubmit example',status:'in_progress'},
+ {name:'Recheck corrected submission',status:'pending'}];
+ const jobs=[{name:'Pipeline / Workshop demonstration · compact',status:'in_progress',steps}];
+ const r=mapRun(run,jobs);
+ equal(r.execution.mode,'grouped_steps');
+ equal(r.stages.find(s=>s.key==='extract')?.reused,true);
+ equal(r.stages.find(s=>s.key==='cpue_vessel')?.status,'running');
+ equal(r.stages.find(s=>s.key==='cpue_year')?.reused,true);
+ equal(r.stages.find(s=>s.key==='prepare_vessel')?.status,'waiting');
+ equal(r.intake_stages.find(s=>s.key==='qc')?.correction_phase,'resubmitting');
+});

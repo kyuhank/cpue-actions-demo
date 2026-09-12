@@ -149,11 +149,11 @@ function drawQuality(){
  const actualSubmission=data.intake_stages?.find(j=>j.key==='submission');
  const phase=data.intake_stages?.find(j=>j.key==='qc')?.correction_phase;
  submission.dataset.status=phase==='resubmitting'?'running':actualSubmission?.status||'waiting';submission.classList.toggle('running',submission.dataset.status==='running');
- submission.querySelector('strong').textContent=phase==='resubmitting'?'Resubmitting…':'Data submission';
+ submission.querySelector('strong').textContent=phase==='resubmitting'?'Resubmit':'Data submission';
  ingest.onclick=()=>{selected='data';dataDraft='new';draw();showPreview('ingest');};
  let label=ingest.querySelector('.ingest-label');if(!label){label=document.createElement('span');label.className='ingest-label';ingest.replaceChildren(label);}label.textContent=(actualIngest&&!actualIngest.skipped?(icons[actualIngest.status]||'·')+' ':'')+'Prepare & load';
  const state=qualityStatus();ingest.className='ingest-node '+(actualIngest?.status||(state==='failed'?'blocked':state==='completed'&&data.data_intake?.published?'completed':'waiting'));submission.classList.toggle('needs-correction',state==='failed'&&phase!=='resubmitting');
- const stamp=data?.data_intake?.checked_at;if(state==='failed'&&!phase&&stamp&&stamp!==qualityAlertStamp){qualityAlertStamp=stamp;notice('QC returned the submission: '+(data.data_intake.quality_check.errors?.[0]?.message||'Correct the flagged records.')+' The corrected example is resubmitted automatically.');}
+ const stamp=data?.data_intake?.checked_at;if(state==='failed'&&!phase&&stamp&&stamp!==qualityAlertStamp){qualityAlertStamp=stamp;notice('QC returned the submission: '+(data.data_intake.quality_check.errors?.[0]?.message||'Correct the flagged records.')+' The provider corrects the flagged records and resubmits.');}
  gate.className='quality-gate '+state;gate.querySelector('small').textContent={completed:'✓ Pass',failed:'× Fail',running:'Check…',waiting:'Ready'}[state];
  if(phase==='rechecking')gate.querySelector('small').textContent='Recheck…';
  gate.style.transform='translateY(-83px)';
@@ -256,7 +256,7 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  $('sql-button').hidden=key!=='extract';$('sql-button').disabled=!nextSource('extract');
  drawBranches(key,busy);
  $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?'Submit example data →':pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()==='failed'&&!busy){$('selection-title').textContent='Retry data submission';$('run').textContent='Retry submission →';}
- if(submittingData&&qualityStatus()!=='failed'&&!busy){$('selection-title').textContent='Data submission';$('progress').textContent='QC returns once → automatic resubmission → full workflow';$('run').textContent='Submit example data →';}
+ if(submittingData&&qualityStatus()!=='failed'&&!busy){$('selection-title').textContent='Data submission';$('progress').textContent='QC returns once → provider correction and resubmission → full workflow';$('run').textContent='Submit example data →';}
  if(key==='data'&&dataDraft&&dataDraft!=='new'){$('selection-title').textContent='Data release '+dataDraft;$('progress').textContent='Use this snapshot → 13 analysis stages';$('run').textContent=busy?'Starting…':'Run with v'+dataDraft+' →';}
  $('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||dataDraft!=='new'||!data.database_connected;$('invalid').disabled=busy||!!stale;
  $('record-dot').className=$('live-dot').className;$('verified').textContent=time(data.source?.last_success);$('message').className='';
@@ -264,7 +264,7 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  if(data.has_run===false&&!busy){$('message').textContent='Ready · verified baseline inputs available';$('run-link').removeAttribute('href');}
  if(data.demo?.reset_at&&!busy){const seconds=Math.max(0,Math.ceil((Date.parse(data.demo.reset_at)-Date.now())/1000));$('message').textContent+=' · resets in '+Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');}
  if(cloudBlocked&&!busy&&!stale){$('message').textContent=data.session.message.includes('owner')?'Viewing only · owner GitHub connection needed':data.session.message;$('message').className='read-only';}
- if(data.intake_stages?.some(j=>j.correction_phase==='resubmitting')){$('message').textContent='QC returned the example → correcting and resubmitting automatically';}else if(data.intake_stages?.some(j=>j.correction_phase==='rechecking')){$('message').textContent='Corrected example submitted → checking again';}
+ if(data.intake_stages?.some(j=>j.correction_phase==='resubmitting')){$('message').textContent='QC returned the example → provider correction and resubmission';}else if(data.intake_stages?.some(j=>j.correction_phase==='rechecking')){$('message').textContent='Corrected example submitted → checking again';}
  if(qc&&!qc.accepted&&!busy){$('message').textContent='QC failed on GitHub · returned to Korea · loading and extraction blocked';}
  narrate();drawQuality();drawCpueProducts();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
 function narrate(){
@@ -277,13 +277,13 @@ function narrate(){
  if(sending)message=changeKind==='data'?'Submitting the example and requesting quality checks.':'Saving the selected versions and preparing the dependent jobs.';
  else if(expected)message='Update accepted. Preparing the selected workflow.';
  else if(phase==='returned'){message='QC failed: one record has zero hooks. Returning the submission for correction.';record.dataset.phase='correction';}
- else if(phase==='resubmitting'){message='Resubmitting automatically: the example record is corrected and sent back to QC.';record.dataset.phase='correction';}
+ else if(phase==='resubmitting'){message='Resubmit: the provider’s corrected file is sent back for QC.';record.dataset.phase='correction';}
  else if(phase==='rechecking'){message='Corrected records resubmitted → checking them again.';record.dataset.phase='correction';}
  else if(intake)message=intake.key==='qc'&&phase==='corrected'?'QC passed on the second check. Saving the accepted submission.':labels[intake.key];
  else if(running.length>1){const cpue=running.filter(s=>['cpue_vessel','cpue_year'].includes(s.key)).length,assess=running.filter(s=>s.key.startsWith('assessment_')).length;message=cpue>1?'Running the two CPUE analyses in parallel.':assess>1?'Running '+assess+' assessment models in parallel.':running.length+' independent jobs are running; dependent jobs wait for their inputs.';}
  else if(running.length){const key=running[0].key;message=labels[key]||(key.startsWith('assessment_')?'Fitting '+names[key].toLowerCase()+' using CPUE '+(key.includes('vessel')?'A':'B')+'.':'Running the selected analysis.');}
  else if(data.has_run===false)message='Select a starting stage. Run it and its dependent jobs.';
- else if(data.status!=='completed')message=data.stages.some(s=>s.status==='completed'&&!s.reused)?'Results saved. Passing verified outputs to the next jobs.':phase==='corrected'?'QC passed. Preparing the analyses with the accepted data.':'Preparing code, software and the selected data version.';
+ else if(data.status!=='completed')message=data.stages.some(s=>s.status==='completed'&&!s.reused)?'Results saved. Passing verified outputs to the next jobs.':phase==='corrected'?(data.intake_stages?.some(s=>s.key==='ingest'&&s.status==='completed')?'QC passed. Preparing the analyses with the accepted data.':'QC passed. Preparing to load the accepted records.'):'Preparing code, software and the selected data version.';
  else if(data.conclusion==='success'){const ran=data.stages.filter(s=>!s.reused).length+(data.intake_stages||[]).filter(s=>!s.skipped).length;message=phase==='corrected'?'QC failed → corrected → passed. '+ran+' jobs completed. Open a job to inspect its outputs.':ran+' jobs completed. Open a job to inspect its outputs.';}
  else{const failed=[...(data.intake_stages||[]),...data.stages].find(s=>s.status==='failed');message=(failed?({submission:'Data submission',qc:'QC',ingest:'Prepare & load'}[failed.key]||names[failed.key])+' stopped. ':'The workflow stopped. ')+'Open its job record to inspect the reason.';record.dataset.phase='failed';}
  if(message)$('message').textContent=message;
@@ -375,6 +375,6 @@ $('sql-button').onclick=async()=>{
 };
 $('data-version').onchange=()=>{dataDraft=$('data-version').value;draw();};
  $('run').onclick=()=>publish(selectedKey()==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()!=='failed');$('invalid').onclick=()=>publish(true);$('logs').onclick=()=>{qualityRecordOpen=false;$('console').hidden=!$('console').hidden;$('logs').setAttribute('aria-expanded',String(!$('console').hidden));$('logs').textContent=$('console').hidden?'Show record':'Hide record';showConsole();};$('dismiss').onclick=()=>{$('notice').hidden=true;};
-if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');refresh();loadBranches();setInterval(refresh,2000);
+if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');refresh();loadBranches();setInterval(refresh,1000);
 async function heartbeat(){try{const r=await fetch('/api/presentation-info',{cache:'no-store'});if(r.ok&&(await r.json()).presentation==='cpue-workshop'&&parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');}catch{}}
 heartbeat();setInterval(heartbeat,4000);

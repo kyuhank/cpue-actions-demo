@@ -1,0 +1,377 @@
+name: Distributed workflow alternative
+
+on:
+  workflow_call:
+    secrets:
+      SUPABASE_URL:
+        required: false
+      SUPABASE_ANON_KEY:
+        required: false
+    inputs:
+      intake_mode:
+        required: false
+        type: string
+        default: none
+      request_id:
+        required: false
+        type: string
+        default: ''
+      data_version:
+        required: false
+        type: string
+        default: ''
+      data_repository:
+        required: true
+        type: string
+      data_ref:
+        required: true
+        type: string
+      analysis_ref:
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: toy-pipeline-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  submission:
+    name: "[submission] Data submission"
+    if: ${{ inputs.intake_mode == 'valid' || inputs.intake_mode == 'invalid' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+    env:
+      TOY_CONTAINER_IMAGE: ghcr.io/pacificcommunity/cpue-workshop@sha256:17b03d6e06da229b17524997d8a3fc8eb5f8f25233894b5ab99f89109b3890c5
+      TOY_CODE_COMMIT: ${{ inputs.analysis_ref || github.sha }}
+      WORKSHOP_INTAKE_MODE: ${{ inputs.intake_mode }}
+      WORKSHOP_REQUEST_ID: ${{ inputs.request_id }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+    steps:
+      - name: Check out intake code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
+          persist-credentials: false
+      - name: Pull container image
+        run: docker pull "$TOY_CONTAINER_IMAGE"
+      - name: Run module
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
+            --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env TOY_CODE_COMMIT --env TOY_CONTAINER_IMAGE \
+            --env WORKSHOP_INTAKE_MODE --env WORKSHOP_REQUEST_ID --env SUPABASE_URL \
+            --network none \
+            "$TOY_CONTAINER_IMAGE" python scripts/data_intake.py submission
+      - name: Save job record
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: stage-${{ github.run_attempt }}-submission
+          path: stage-${{ github.run_attempt }}-submission.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+  qc:
+    name: "[qc] Data quality check"
+    if: ${{ inputs.intake_mode == 'valid' || inputs.intake_mode == 'invalid' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: read
+    env:
+      TOY_CONTAINER_IMAGE: ghcr.io/pacificcommunity/cpue-workshop@sha256:17b03d6e06da229b17524997d8a3fc8eb5f8f25233894b5ab99f89109b3890c5
+      TOY_CODE_COMMIT: ${{ inputs.analysis_ref || github.sha }}
+      WORKSHOP_INTAKE_MODE: ${{ inputs.intake_mode }}
+      WORKSHOP_REQUEST_ID: ${{ inputs.request_id }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+    steps:
+      - name: Check out intake code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
+          persist-credentials: false
+      - name: Pull container image
+        run: docker pull "$TOY_CONTAINER_IMAGE"
+      - name: Wait for accepted upstream records
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/wait_intake.py qc
+      - name: Download submission record
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: stage-${{ github.run_attempt }}-submission
+      - name: Restore submission record
+        run: python3 -c 'import tarfile,os; tarfile.open("stage-"+os.environ["GITHUB_RUN_ATTEMPT"]+"-submission.tar.gz").extractall(filter="data")'
+      - name: QC submitted records
+        id: initial_qc
+        continue-on-error: ${{ inputs.intake_mode == 'invalid' }}
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
+            --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env TOY_CODE_COMMIT --env TOY_CONTAINER_IMAGE \
+            --env WORKSHOP_INTAKE_MODE --env WORKSHOP_REQUEST_ID --env SUPABASE_URL \
+            --network none \
+            "$TOY_CONTAINER_IMAGE" python scripts/data_intake.py qc
+      - name: Return failed submission
+        if: ${{ steps.initial_qc.outcome == 'failure' && inputs.intake_mode == 'invalid' }}
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
+            --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env TOY_CODE_COMMIT --env TOY_CONTAINER_IMAGE \
+            --env WORKSHOP_INTAKE_MODE --env WORKSHOP_REQUEST_ID --env SUPABASE_URL \
+            --network none \
+            "$TOY_CONTAINER_IMAGE" python scripts/data_intake.py return
+      - name: Correct and resubmit example
+        if: ${{ steps.initial_qc.outcome == 'failure' && inputs.intake_mode == 'invalid' }}
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
+            --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env TOY_CODE_COMMIT --env TOY_CONTAINER_IMAGE \
+            --env WORKSHOP_INTAKE_MODE --env WORKSHOP_REQUEST_ID --env SUPABASE_URL \
+            --network none \
+            "$TOY_CONTAINER_IMAGE" python scripts/data_intake.py resubmit
+      - name: Recheck corrected submission
+        if: ${{ steps.initial_qc.outcome == 'failure' && inputs.intake_mode == 'invalid' }}
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
+            --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env TOY_CODE_COMMIT --env TOY_CONTAINER_IMAGE \
+            --env WORKSHOP_INTAKE_MODE --env WORKSHOP_REQUEST_ID --env SUPABASE_URL \
+            --network none \
+            "$TOY_CONTAINER_IMAGE" python scripts/data_intake.py qc
+      - name: Save job record
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: stage-${{ github.run_attempt }}-qc
+          path: stage-${{ github.run_attempt }}-qc.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+  ingest:
+    name: "[ingest] Prepare and load"
+    if: ${{ inputs.intake_mode == 'valid' || inputs.intake_mode == 'invalid' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    env:
+      TOY_CONTAINER_IMAGE: ghcr.io/pacificcommunity/cpue-workshop@sha256:17b03d6e06da229b17524997d8a3fc8eb5f8f25233894b5ab99f89109b3890c5
+      TOY_CODE_COMMIT: ${{ inputs.analysis_ref || github.sha }}
+      WORKSHOP_INTAKE_MODE: ${{ inputs.intake_mode }}
+      WORKSHOP_REQUEST_ID: ${{ inputs.request_id }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+    steps:
+      - name: Check out intake code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
+          persist-credentials: false
+      - name: Pull container image
+        run: docker pull "$TOY_CONTAINER_IMAGE"
+      - name: Wait for accepted upstream records
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/wait_intake.py ingest
+      - name: Download submission record
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: stage-${{ github.run_attempt }}-submission
+      - name: Restore submission record
+        run: python3 -c 'import tarfile,os; tarfile.open("stage-"+os.environ["GITHUB_RUN_ATTEMPT"]+"-submission.tar.gz").extractall(filter="data")'
+      - name: Download qc record
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: stage-${{ github.run_attempt }}-qc
+      - name: Restore qc record
+        run: python3 -c 'import tarfile,os; tarfile.open("stage-"+os.environ["GITHUB_RUN_ATTEMPT"]+"-qc.tar.gz").extractall(filter="data")'
+      - name: Run module
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
+            --env GITHUB_RUN_ID --env GITHUB_RUN_ATTEMPT --env TOY_CODE_COMMIT --env TOY_CONTAINER_IMAGE \
+            --env WORKSHOP_INTAKE_MODE --env WORKSHOP_REQUEST_ID --env SUPABASE_URL \
+            --env ACTIONS_ID_TOKEN_REQUEST_URL --env ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+            "$TOY_CONTAINER_IMAGE" python scripts/data_intake.py ingest
+      - name: Save job record
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: stage-${{ github.run_attempt }}-ingest
+          path: stage-${{ github.run_attempt }}-ingest.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+  prepare:
+    needs: [ingest]
+    if: ${{ always() && !cancelled() && (needs.ingest.result == 'success' || inputs.intake_mode == 'none' || inputs.intake_mode == '') }}
+    name: "[plan] Verify sources and prepare inputs"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      extract: ${{ steps.plan.outputs.extract }}
+      cpue_vessel: ${{ steps.plan.outputs.cpue_vessel }}
+      cpue_year: ${{ steps.plan.outputs.cpue_year }}
+      cpue_summary: ${{ steps.plan.outputs.cpue_summary }}
+      cpue_report: ${{ steps.plan.outputs.cpue_report }}
+      prepare_vessel: ${{ steps.plan.outputs.prepare_vessel }}
+      prepare_year: ${{ steps.plan.outputs.prepare_year }}
+      assessment_vessel_ref: ${{ steps.plan.outputs.assessment_vessel_ref }}
+      assessment_vessel_high_m: ${{ steps.plan.outputs.assessment_vessel_high_m }}
+      assessment_year_ref: ${{ steps.plan.outputs.assessment_year_ref }}
+      assessment_year_high_m: ${{ steps.plan.outputs.assessment_year_high_m }}
+      synthesis: ${{ steps.plan.outputs.synthesis }}
+      report: ${{ steps.plan.outputs.report }}
+    env:
+      TOY_CONTAINER_IMAGE: ghcr.io/pacificcommunity/cpue-workshop@sha256:17b03d6e06da229b17524997d8a3fc8eb5f8f25233894b5ab99f89109b3890c5
+      TOY_CODE_COMMIT: ${{ inputs.analysis_ref || github.sha }}
+      TOY_DATA_COMMIT: ${{ inputs.data_ref || github.sha }}
+      TOY_DATA_REPOSITORY: ${{ inputs.data_repository || github.repository }}
+      TOY_SOURCE_DATABASE: ${{ inputs.data_repository && 'source-data/data/toy-fishery.sqlite' || 'data/toy-fishery.sqlite' }}
+      TOY_EXECUTION_MODE: module_jobs
+      TOY_GITHUB_JOB: workshop
+      TOY_STAGE_CONFIG: ${{ inputs.data_repository && 'source-data/config/stages.json' || 'config/stages.json' }}
+      TOY_DEMO_PACE_SECONDS: 0
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      TOY_DATABASE_VERSION: ${{ inputs.data_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.analysis_ref || github.sha }}
+      - name: Checkout source data
+        if: ${{ inputs.data_repository != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ inputs.data_repository }}
+          ref: ${{ inputs.data_ref }}
+          path: source-data
+      - name: Pull the pinned container
+        run: docker pull "$TOY_CONTAINER_IMAGE"
+      - name: Retrieve locked analysis modules
+        run: python3 scripts/resolve_modules.py
+      - name: Verify repository CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/verify_modules.py
+      - name: Fetch versioned database snapshot
+        if: env.SUPABASE_URL != '' || inputs.data_version != ''
+        env:
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
+            --env SUPABASE_URL --env SUPABASE_ANON_KEY --env TOY_DATABASE_VERSION --env TOY_SOURCE_DATABASE --env TOY_STAGE_CONFIG \
+            "$TOY_CONTAINER_IMAGE" python supabase/snapshot.py
+          python3 -c 'import json,os,pathlib; v=json.loads(pathlib.Path(os.environ["TOY_SOURCE_DATABASE"]).with_suffix(".release.json").read_text())["version"]; open(os.environ["GITHUB_ENV"],"a").write(f"TOY_SOURCE_PROVIDER=supabase\nTOY_SOURCE_VERSION={v}\n")'
+      - name: Restore and verify reusable outputs
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/workflow_plan.py
+      - name: Freeze the verified workspace
+        run: python3 scripts/workflow_context.py
+      - name: Save code and recorded inputs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: workflow-context-${{ github.run_attempt }}
+          path: workflow-context.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+  # Prepare independent runners together. The module verifies the previous group
+  # before calculating; unchanged stage outputs stay reusable.
+  extract:
+    name: "[extract] ${{ needs.prepare.outputs.extract == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.extract == 'run' }}
+    uses: kyuhank/cpue-demo-extract/.github/workflows/stage.yml@c50604b17106905deb03fdada558d5b745e9257a
+    with:
+      stage: extract
+  cpue_vessel:
+    name: "[cpue_vessel] ${{ needs.prepare.outputs.cpue_vessel == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.cpue_vessel == 'run' }}
+    uses: kyuhank/cpue-demo-cpue/.github/workflows/stage.yml@961a56e8e140bf719ef0caf0dc40171c1d18b60e
+    with:
+      stage: cpue_vessel
+  cpue_year:
+    name: "[cpue_year] ${{ needs.prepare.outputs.cpue_year == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.cpue_year == 'run' }}
+    uses: kyuhank/cpue-demo-cpue/.github/workflows/stage.yml@961a56e8e140bf719ef0caf0dc40171c1d18b60e
+    with:
+      stage: cpue_year
+  cpue_summary:
+    name: "[cpue_summary] ${{ needs.prepare.outputs.cpue_summary == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.cpue_summary == 'run' }}
+    uses: kyuhank/cpue-demo-cpue/.github/workflows/stage.yml@961a56e8e140bf719ef0caf0dc40171c1d18b60e
+    with:
+      stage: cpue_summary
+  cpue_report:
+    name: "[cpue_report] ${{ needs.prepare.outputs.cpue_report == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.cpue_report == 'run' }}
+    uses: kyuhank/cpue-demo-cpue/.github/workflows/stage.yml@961a56e8e140bf719ef0caf0dc40171c1d18b60e
+    with:
+      stage: cpue_report
+  prepare_vessel:
+    name: "[prepare_vessel] ${{ needs.prepare.outputs.prepare_vessel == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.prepare_vessel == 'run' }}
+    uses: kyuhank/cpue-demo-inputs/.github/workflows/stage.yml@0877c2c838e1760285c5f82e1c670e22fa4d9140
+    with:
+      stage: prepare_vessel
+  prepare_year:
+    name: "[prepare_year] ${{ needs.prepare.outputs.prepare_year == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.prepare_year == 'run' }}
+    uses: kyuhank/cpue-demo-inputs/.github/workflows/stage.yml@0877c2c838e1760285c5f82e1c670e22fa4d9140
+    with:
+      stage: prepare_year
+  assessment_vessel_ref:
+    name: "[assessment_vessel_ref] ${{ needs.prepare.outputs.assessment_vessel_ref == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.assessment_vessel_ref == 'run' }}
+    uses: kyuhank/cpue-demo-assessment/.github/workflows/stage.yml@3c9b6989b4afbe2a3004779c1ac98cf4d4471eae
+    with:
+      stage: assessment_vessel_ref
+  assessment_vessel_high_m:
+    name: "[assessment_vessel_high_m] ${{ needs.prepare.outputs.assessment_vessel_high_m == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.assessment_vessel_high_m == 'run' }}
+    uses: kyuhank/cpue-demo-assessment/.github/workflows/stage.yml@3c9b6989b4afbe2a3004779c1ac98cf4d4471eae
+    with:
+      stage: assessment_vessel_high_m
+  assessment_year_ref:
+    name: "[assessment_year_ref] ${{ needs.prepare.outputs.assessment_year_ref == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.assessment_year_ref == 'run' }}
+    uses: kyuhank/cpue-demo-assessment/.github/workflows/stage.yml@3c9b6989b4afbe2a3004779c1ac98cf4d4471eae
+    with:
+      stage: assessment_year_ref
+  assessment_year_high_m:
+    name: "[assessment_year_high_m] ${{ needs.prepare.outputs.assessment_year_high_m == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.assessment_year_high_m == 'run' }}
+    uses: kyuhank/cpue-demo-assessment/.github/workflows/stage.yml@3c9b6989b4afbe2a3004779c1ac98cf4d4471eae
+    with:
+      stage: assessment_year_high_m
+  synthesis:
+    name: "[synthesis] ${{ needs.prepare.outputs.synthesis == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.synthesis == 'run' }}
+    uses: kyuhank/cpue-demo-synthesis/.github/workflows/stage.yml@d4cd577b8a8ddc6645fe0eccd29b8728bc0bfe84
+    with:
+      stage: synthesis
+  report:
+    name: "[report] ${{ needs.prepare.outputs.report == 'reuse' && '· reused' || '' }}"
+    needs: [prepare]
+    if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.report == 'run' }}
+    uses: kyuhank/cpue-demo-report/.github/workflows/stage.yml@3ebe16ea44da177503348e0cda7c91552c09199c
+    with:
+      stage: report

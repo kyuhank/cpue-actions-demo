@@ -45,7 +45,7 @@ def main():
         if rejected['accepted']:raise SystemExit('No failed check to return')
         print('RETURN: hooks must be greater than zero; correction request saved for the submitted record',flush=True)
         write('qc',{'first-quality.json':rejected,'return.json':{'status':'returned','reason':rejected['errors'][0]['message']}},False)
-        time.sleep(3)
+        time.sleep(min(3,float(os.getenv('WORKSHOP_INTAKE_SECONDS','3'))))
     elif key=='resubmit':
         original=json.loads((ROOT/'stages/submission/outputs/submission.json').read_text())
         rejected=json.loads((ROOT/'stages/qc/outputs/quality.json').read_text())
@@ -55,7 +55,7 @@ def main():
             raise SystemExit('Only the fixed demonstration correction may be resubmitted automatically')
         print('RETURN: hooks must be greater than zero; submission returned with the failed record ID',flush=True)
         print('RESUBMIT: applying the predefined demonstration correction once',flush=True)
-        time.sleep(3)
+        time.sleep(min(3,float(os.getenv('WORKSHOP_INTAKE_SECONDS','3'))))
         write('qc',{'first-quality.json':rejected,'accepted-submission.json':fixed,'correction.json':{
             'automatic_demo_correction':True,'attempt':2,'field':'hooks','set_id':fixed['sets'][0][0],
             'before':0,'after':fixed['sets'][0][3],'original_sha256':digest(canonical(original)),
@@ -64,7 +64,7 @@ def main():
     elif key=='qc':
         corrected=ROOT/'stages/qc/outputs/accepted-submission.json'
         batch=json.loads((corrected if corrected.exists() else ROOT/'stages/submission/outputs/submission.json').read_text());quality=check(batch)
-        if corrected.exists():time.sleep(3)
+        if corrected.exists():time.sleep(min(3,float(os.getenv('WORKSHOP_INTAKE_SECONDS','3'))))
         write(key,{'quality.json':quality},quality['accepted'])
         for error in quality['errors']:print('::error title=QC returned to Korea::'+error['message']+' '+json.dumps(error.get('examples',[])),flush=True)
         print('QC '+('complete: accepted; release may be prepared' if quality['accepted'] else 'FAILED: returned to Korea; correct and resubmit; loading and extraction blocked'),flush=True)

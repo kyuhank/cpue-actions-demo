@@ -31,7 +31,7 @@ def intake_page(key, folder, success):
         result=('QC passed. The batch is ready to load.' if accepted else 'QC failed. The batch must be corrected.')
         body=''
         if correction:
-            body+='<h2>Correction history</h2><p><b>Failed → corrected → '+('passed' if accepted else 'awaiting recheck')+'</b></p><p>Set '+html.escape(str(correction['set_id']))+': hooks changed from <b>'+str(correction['before'])+'</b> to <b>'+str(correction['after'])+'</b>. The demonstration submits this predefined correction automatically.</p>'
+            body+='<h2>Correction history</h2><p><b>Failed → corrected → '+('passed' if accepted else 'awaiting recheck')+'</b></p><p>Set '+html.escape(str(correction['set_id']))+': hooks changed from <b>'+str(correction['before'])+'</b> to <b>'+str(correction['after'])+'</b>. The provider corrects the returned record before resubmitting. This demonstration uses a predefined correction.</p>'
         for error in quality.get('errors',[]):
             body+='<p>'+html.escape(error['message'])+'</p>'
         body+='<h2>Checks</h2><ul>'+''.join('<li>'+html.escape(check)+'</li>' for check in quality.get('checks',[]))+'</ul>'

@@ -30,9 +30,13 @@ export async function acceptIntake(request:Request){
  const pin=atob(workflow.content.replace(/\s/g,'')).match(/toy-pipeline\.yml@([a-f0-9]{40})/)?.[1];
  if(!pin||claims.job_workflow_ref!==`kyuhank/cpue-actions-demo/.github/workflows/toy-pipeline.yml@${pin}`||claims.job_workflow_sha!==pin)throw Error('Unregistered intake workflow.');
  const jobs=(await json(`actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`)).jobs;
- if(!['submission','qc'].every(k=>jobs.some((j:any)=>j.name.includes('['+k+']')&&j.conclusion==='success'))||!jobs.some((j:any)=>j.name.includes('[ingest]')&&j.status==='in_progress'))throw new IntakePending('Submission and QC must pass before loading.');
+ const combined=jobs.find((j:any)=>j.name.endsWith('Workshop demonstration · compact'));
+ const combinedSteps=combined?.steps||[];
+ if(combined){
+  if(combined.status!=='in_progress'||!['Data submission','QC submitted records'].every(name=>combinedSteps.some((s:any)=>s.name===name&&s.conclusion==='success'))||!combinedSteps.some((s:any)=>s.name==='Prepare and load accepted data'&&s.status==='in_progress'))throw new IntakePending('Successful submission and QC steps must precede loading.');
+ }else if(!['submission','qc'].every(k=>jobs.some((j:any)=>j.name.includes('['+k+']')&&j.conclusion==='success'))||!jobs.some((j:any)=>j.name.includes('[ingest]')&&j.status==='in_progress'))throw new IntakePending('Submission and QC must pass before loading.');
  if(record.result.intake_mode==='invalid'){
-  const qc=jobs.find((j:any)=>j.name.includes('[qc]'));
+  const qc=combined||jobs.find((j:any)=>j.name.includes('[qc]'));
   if(!['Correct and resubmit example','Recheck corrected submission'].every(name=>qc?.steps?.some((step:any)=>step.name===name&&step.conclusion==='success')))throw new IntakePending('The corrected example must be resubmitted and checked.');
  }
  const batch=(batches as any)['2024'];

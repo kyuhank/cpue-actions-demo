@@ -43,7 +43,7 @@ Deno.test('Independent runners expose setup, reused inputs and failure states pe
  const result=mapRun(run,jobs);
  assert(result.execution.mode==='module_jobs');
  assert(result.stages.find(s=>s.key==='extract')?.reused);
- assert(result.stages.find(s=>s.key==='cpue_vessel')?.status==='running');
+ assert(result.stages.find(s=>s.key==='cpue_vessel')?.status==='waiting');
  assert(result.stages.find(s=>s.key==='cpue_vessel')?._job_id===3);
  assert(result.stages.find(s=>s.key==='cpue_year')?.status==='failed');
  assert(result.stages.find(s=>s.key==='report')?.status==='waiting');
@@ -56,4 +56,9 @@ Deno.test('A warm runner waiting for its group is not an analysis in progress',(
  const jobs=[{name:'[plan]',status:'completed',conclusion:'success',steps:[]},{name:'[cpue_vessel] / run / Execute',status:'in_progress',steps:[barrier,module]}];
  equal(mapRun(run,jobs).stages.find(s=>s.key==='cpue_vessel')?.status,'waiting');
  module.status='in_progress';equal(mapRun(run,jobs).stages.find(s=>s.key==='cpue_vessel')?.status,'running');
+});
+
+Deno.test('Runner allocation without step metadata never marks downstream computation running',()=>{
+ const r=mapRun({id:123,run_attempt:1,status:'in_progress',display_title:'Demo'},[{name:'[plan]',status:'completed',conclusion:'success'},{name:'[report]',status:'in_progress',steps:[]}]);
+ if(r.stages.some(s=>s.status==='running'))throw Error('Setup must remain waiting');
 });

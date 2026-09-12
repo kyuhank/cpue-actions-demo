@@ -51,7 +51,7 @@ export function mapRun(run:any,jobs:any[]){
   if(distributed)state=reused?'completed':job?.status==='in_progress'?'running':job?.status==='completed'?({success:'completed',failure:'failed',cancelled:'cancelled',skipped:'blocked',timed_out:'failed'} as any)[job.conclusion]||'blocked':run.status==='completed'?'blocked':'waiting';
   // Warm runners can prepare software while the previous group is still running.
   const barrier=distributed?job?.steps?.find((s:any)=>s.name==='Wait for previous stage group and verify inputs'):null;
-  if(barrier&&job?.status==='in_progress'&&(!step||step.status==='pending'||step.status==='queued'))state='waiting';
+  if(distributed&&job?.status==='in_progress'&&(!step||!['in_progress','completed'].includes(step.status)))state='waiting';
   states[key]=state;
   return {key,label:label.slice(3),parents,status:state,reused,source_id:`${run.id}-${run.run_attempt}-${key}`,started_at:distributed?job?.started_at:step?.started_at,completed_at:distributed?job?.completed_at:step?.completed_at,html_url:job?.html_url,_job_id:job?.id,_step_number:step?.number};
  });
@@ -66,7 +66,10 @@ export function mapRun(run:any,jobs:any[]){
   const job=jobs.find(j=>j.name?.includes('['+key+']'));
   let status=job?.status==='in_progress'?'running':job?.conclusion==='success'?'completed':job?.conclusion==='failure'?'failed':job?.conclusion==='skipped'?(jobs.some(j=>j.name?.includes('[submission]')&&j.conclusion==='skipped')?'not_requested':'blocked'):'waiting';
   const barrier=job?.steps?.find((s:any)=>s.name==='Wait for accepted upstream records');
-  if(status==='running'&&barrier?.conclusion!=='success'&&barrier)status='waiting';
+  if(status==='running'&&['qc','ingest'].includes(String(key))){
+   const operation=job?.steps?.find((s:any)=>s.name===(key==='qc'?'QC submitted records':'Run module'));
+   if(!operation||!['in_progress','completed'].includes(operation.status))status='waiting';
+  }
   return {key,parents,correction_phase:key==='qc'?(returned?'returned':correcting?'resubmitting':rechecking?'rechecking':recheck?.conclusion==='success'?'corrected':null):null,status,skipped:job?.conclusion==='skipped',source_id:`${run.id}-${run.run_attempt}-${key}`,_job_id:job?.id,html_url:job?.html_url};
  });
  return {ready:true,has_run:true,stages,intake_stages,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,

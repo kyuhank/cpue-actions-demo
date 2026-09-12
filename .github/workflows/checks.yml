@@ -2,9 +2,9 @@ name: Checks
 
 on:
   push:
-    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'modules.lock.json', 'module-branches.json', 'supabase/snapshot.py', '.github/workflows/checks.yml']
+    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'modules.lock.json', 'module-branches.json', 'supabase/snapshot.py', '.github/workflows/checks.yml', '.github/workflows/toy-pipeline.yml']
   pull_request:
-    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'modules.lock.json', 'module-branches.json', 'supabase/snapshot.py', '.github/workflows/checks.yml']
+    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'modules.lock.json', 'module-branches.json', 'supabase/snapshot.py', '.github/workflows/checks.yml', '.github/workflows/toy-pipeline.yml']
 
 permissions:
   contents: read
@@ -34,3 +34,7 @@ jobs:
         run: python3 tests/check_stage_barrier.py
       - name: Verify the compact runner and result pages
         run: python3 tests/check_compact_groups.py
+      - name: Verify rejected data and corrected resubmission
+        run: python3 tests/check_data_intake.py
+      - name: Verify visible stage timing and immediate reuse
+        run: python3 tests/check_stage_pacing.py

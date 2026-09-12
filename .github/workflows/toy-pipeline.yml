@@ -54,7 +54,7 @@ jobs:
       WORKSHOP_GROUP_SECONDS: 2.5
       WORKSHOP_INTAKE_SECONDS: 2.5
       WORKSHOP_DATABASE_SECONDS: 2.5
-      WORKSHOP_TRANSITION_SECONDS: 2
+      WORKSHOP_TRANSITION_SECONDS: 1
       WORKSHOP_INTAKE_MODE: ${{ inputs.intake_mode }}
       WORKSHOP_REQUEST_ID: ${{ inputs.request_id }}
       TOY_DATABASE_VERSION: ${{ inputs.data_version }}

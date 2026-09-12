@@ -46,7 +46,7 @@ function node(key){
  const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.target='_blank';link.rel='noopener';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};link.onmouseenter=hidePreview;
  if(key==='data'){const shell=document.createElementNS('http://www.w3.org/2000/svg','svg');shell.setAttribute('viewBox','0 0 140 100');shell.setAttribute('preserveAspectRatio','none');shell.setAttribute('aria-hidden','true');shell.classList.add('database-shell');shell.innerHTML='<path class=database-body d="M1 12V87C1 103 139 103 139 87V12"/><ellipse cx=70 cy=12 rx=69 ry=11 /><path class=record-lines d="M38 76H112M38 84H112M38 92H112M65 73V95M88 73V95"/><path class=record-keys d="M27 74h5v4h-5zM27 82h5v4h-5zM27 90h5v4h-5z"/>';el.append(shell);}
  el.append(control,link);el.onclick=()=>{selected=key;if(key==='data')dataDraft=String(data?.database_version||2023);draw();showPreview(key);};
- el.onmouseenter=()=>{clearTimeout(previewTimer);previewTimer=setTimeout(()=>showPreview(key),180);};el.onmouseleave=hidePreview;control.onfocus=()=>showPreview(key);control.onblur=hidePreview;
+ el.onmouseleave=hidePreview;control.onblur=hidePreview;
  $('chain').append(el);return el;
 }
 function drawCpueProducts(){}
@@ -136,14 +136,14 @@ function drawQuality(){
  let gate=$('quality-gate');if(!gate){
   gate=document.createElement('button');gate.id='quality-gate';gate.type='button';gate.dataset.key='qc';gate.innerHTML='<strong>QC</strong><small></small>';
   gate.onclick=()=>{qualityRecordOpen=true;hidePreview();$('console').hidden=false;$('logs').textContent='Hide record';$('logs').setAttribute('aria-expanded','true');showQualityRecord();};
-  gate.onmouseenter=()=>showPreview('qc');gate.onmouseleave=hidePreview;gate.onfocus=()=>showPreview('qc');gate.onblur=hidePreview;$('chain').append(gate);
+  gate.onmouseleave=hidePreview;gate.onblur=hidePreview;$('chain').append(gate);
  }
  let submission=$('submission-node');if(!submission){submission=document.createElement('div');submission.id='submission-node';submission.dataset.key='submission';submission.className='submission-node';submission.innerHTML='<button class="node-control"><strong>Data submission</strong></button>';submission.onclick=()=>{selected='data';dataDraft='new';draw();};$('chain').append(submission);}
  submission.classList.toggle('selected',selected==='data'&&(!dataDraft||dataDraft==='new'));
  node('data').classList.toggle('selected',selected==='data'&&dataDraft!=='new');
  let ingest=$('ingest-node');if(!ingest){ingest=document.createElement('button');ingest.id='ingest-node';ingest.dataset.key='ingest';ingest.textContent='Prepare & load';ingest.title='Owner · Jessica, Tiffany. Align fields, formats and units; load accepted records into the database.';$('chain').append(ingest);}
  for(const [key,el] of [['submission',submission],['qc',gate]]){
-  el.onmouseenter=()=>showPreview(key);el.onmouseleave=hidePreview;
+  el.onmouseleave=hidePreview;
   let link=el.querySelector('.source-link');if(!link){link=document.createElement('a');link.className='source-link';link.textContent='↗';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};link.onmouseenter=hidePreview;el.append(link);}sourceLink(key);
  }
 
@@ -160,7 +160,7 @@ function drawQuality(){
  if(phase==='rechecking')gate.querySelector('small').textContent='Recheck…';
  gate.style.transform='translateY(-83px)';
  gate.title='View the data quality check';
- if(!ingest.querySelector('.source-link')){const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource('ingest');};ingest.append(link);}sourceLink('ingest');ingest.onmouseenter=()=>showPreview('ingest');ingest.onmouseleave=hidePreview;
+ if(!ingest.querySelector('.source-link')){const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource('ingest');};ingest.append(link);}sourceLink('ingest');ingest.onmouseleave=hidePreview;
  const intakeSelected=selected==='data'&&(!dataDraft||dataDraft==='new');for(const el of [submission,gate,ingest]){el.classList.toggle('impacted',intakeSelected);el.classList.toggle('outside-impact',!!selected&&!intakeSelected);}
  const correction=data.intake_stages?.find(j=>j.key==='qc')?.correction_phase;gate.dataset.correction=correction||'';if(correction==='corrected')gate.title='Initial QC failed → example corrected and resubmitted → recheck passed';
  gate.setAttribute('aria-label','Quality check: '+{completed:'passed',failed:'failed',running:'checking',waiting:'ready'}[state]+'. View checks.');

@@ -1,4 +1,4 @@
-import { unzipSync } from 'npm:fflate@0.8.2';
+import { unzipSync, gunzipSync } from 'npm:fflate@0.8.2';
 export const REPO = 'kyuhank/cpue-toy-data';
 export const DEMO_BRANCH = 'demo-runtime';
 export const definitions = [
@@ -131,12 +131,34 @@ async function download(response:Response,limit:number):Promise<Uint8Array>{
 }
 export async function stageOutputs(source:string){
  const id=outputStage(source);if(!id)throw Error('Unknown output.');
- const run=await json('actions/runs/'+id[1]);if(run.path!=='.github/workflows/update.yml'||run.conclusion!=='success'||run.run_attempt!==Number(id[2]))throw Error('Unknown successful workshop run.');
- const a=(await json(`actions/runs/${id[1]}/artifacts?per_page=100`)).artifacts.find((x:any)=>x.name==='workflow-'+id[2]&&!x.expired);
+ const run=await json('actions/runs/'+id[1]);if(run.path!=='.github/workflows/update.yml'||run.run_attempt!==Number(id[2]))throw Error('Unknown successful workshop run.');
+ const artifacts=(await json(`actions/runs/${id[1]}/artifacts?per_page=100`)).artifacts.filter((x:any)=>!x.expired);
+ const a=artifacts.find((x:any)=>x.name==='workflow-'+id[2])||artifacts.find((x:any)=>x.name==='stage-'+id[2]+'-'+id[3])||artifacts.find((x:any)=>x.name==='workflow-context-'+id[2]);
  if(!a||a.size_in_bytes>16*1024*1024)throw Error('Report artifact unavailable.');
  const bytes=await download(await github(`actions/artifacts/${a.id}/zip`),16*1024*1024);
  if(a.digest?.startsWith('sha256:')){const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes).buffer))).map(x=>x.toString(16).padStart(2,'0')).join('');if(a.digest!=='sha256:'+hash)throw Error('Artifact checksum mismatch.');}
  const wanted=new Map(outputNames(id[3]).map(name=>[id[3]+(name==='record.json'?'/':'/outputs/')+name,name]));
+ if(a.name!=='workflow-'+id[2]){
+  const packedName=a.name.startsWith('stage-')?a.name+'.tar.gz':'workflow-context.tar.gz';
+  const packed=unzipSync(bytes,{filter:f=>f.name===packedName&&f.originalSize<=16*1024*1024})[packedName];
+  if(!packed||packed.length<8||new DataView(packed.buffer,packed.byteOffset+packed.length-4,4).getUint32(0,true)>32*1024*1024)throw Error('Invalid stage archive.');
+  const tar=gunzipSync(packed),decoder=new TextDecoder(),result:Record<string,string>={};
+  for(let offset=0;offset+512<=tar.length;){
+   const header=tar.subarray(offset,offset+512),name=decoder.decode(header.subarray(0,100)).split('\0')[0];if(!name)break;
+   const size=parseInt(decoder.decode(header.subarray(124,136)).replace(/\0/g,'').trim()||'0',8);
+   if(!Number.isSafeInteger(size)||size<0||offset+512+size>tar.length)throw Error('Invalid stage file.');
+   const target=wanted.get(name.replace(/^stages\//,''));
+   if(target&&size<=2*1024*1024&&(header[156]===0||header[156]===48))result[target]=decoder.decode(tar.subarray(offset+512,offset+512+size));
+   offset+=512+Math.ceil(size/512)*512;
+  }
+  if(!result['record.json'])throw Error('This job has no completed output record yet.');
+  const record=JSON.parse(result['record.json']);if(record.stage!==id[3]||!record.completed_at)throw Error('Job outputs are incomplete.');
+  for(const [name,text] of Object.entries(result))if(name!=='record.json'){
+   const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))).map(x=>x.toString(16).padStart(2,'0')).join('');
+   if(record.outputs?.[name]!==hash)throw Error('Job output checksum mismatch.');
+  }
+  return result;
+ }
  const entries=unzipSync(bytes,{filter:f=>wanted.has(f.name)&&f.originalSize<=2*1024*1024});
  return Object.fromEntries([...wanted].filter(([path])=>entries[path]).map(([path,name])=>[name,new TextDecoder().decode(entries[path])]));
 }
@@ -146,9 +168,10 @@ export async function output(source:string,file:string){
 }
 export async function consoleLines(status:any){
  if(status.status!=='completed'||!status.execution?.jobs?.[0])return {ready:false,lines:[]};
- const text=new TextDecoder().decode(await download(await github(`actions/jobs/${status.execution.jobs[0].id}/logs`),8*1024*1024));
- const keep=/MODULE [a-z_]+:|DATA QUALITY:|DATABASE SNAPSHOT:|Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|WORKFLOW PLAN:|PRESENTATION PACE:|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:/;
- return {ready:true,run_id:status.run_id,attempt:status.attempt,source:'GitHub Actions console log',lines:text.split('\n').filter(x=>keep.test(x)).slice(-40)};
+ const jobs=status.execution.mode==='module_jobs'?status.execution.jobs.filter((j:any)=>j.status==='completed'&&j.conclusion!=='skipped'):[status.execution.jobs[0]];
+ const logs=await Promise.all(jobs.map(async(j:any)=>new TextDecoder().decode(await download(await github(`actions/jobs/${j.id}/logs`),8*1024*1024))));const text=logs.join('\n');
+ const keep=/CI PASSED:|SOURCE:|INPUTS:|OUTPUTS:|MODULE [a-z_]+:|DATA QUALITY:|DATABASE SNAPSHOT:|Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|WORKFLOW PLAN:|PRESENTATION PACE:|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:/;
+ return {ready:true,run_id:status.run_id,attempt:status.attempt,source:'GitHub Actions console log',lines:text.split('\n').filter(x=>keep.test(x)).sort().slice(-70)};
 }
 export async function change(stage:string){
  if(!changeable.has(stage as any))throw Error('Unknown stage.');
@@ -229,7 +252,7 @@ export async function stageLog(status:any,key:string){
  if(job.status==='completed'&&job.conclusion!=='skipped'){
   try{
    const log=new TextDecoder().decode(await download(await github(`actions/jobs/${job.id}/logs`),8*1024*1024));
-   const keep=/Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:|REPRODUCIBILITY:|ERROR|Error:|ValueError:/;
+   const keep=/SOURCE:|DATA: release|INPUTS:|OUTPUTS:|Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:|REPRODUCIBILITY:|ERROR|Error:|ValueError:/;
    let lines=log.split('\n').filter(x=>keep.test(x)&&!x.includes('##[group]')).map(x=>x.replace(/^(\S+)\s*/,(_,t)=>stamp(t)+'  ').slice(0,240));
    if(status.execution.mode==='steps'){
     const tags:Record<string,string>={extract:'EXTRACT complete:',cpue_vessel:'vessel_adjusted',cpue_year:'year_only',prepare_vessel:'INPUT PREPARATION complete:',prepare_year:'INPUT PREPARATION complete:',synthesis:'SYNTHESIS complete:',report:'REPORT complete:'};

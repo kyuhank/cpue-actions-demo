@@ -3,6 +3,8 @@ const $=id=>document.getElementById(id);
 const positions={data:[1,1,5],extract:[2,1,5],cpue_vessel:[3,1,3],cpue_year:[3,3,5],prepare_vessel:[4,1,3],prepare_year:[4,3,5],assessment_vessel_ref:[5,1,2],assessment_vessel_high_m:[5,2,3],assessment_year_ref:[5,3,4],assessment_year_high_m:[5,4,5],synthesis:[6,1,5],report:[7,1,5]};
 const names={data:'Data',extract:'Extract',cpue_vessel:'CPUE A',cpue_year:'CPUE B',prepare_vessel:'Input prep',prepare_year:'Input prep',assessment_vessel_ref:'Assessment 1',assessment_vessel_high_m:'Assessment 2',assessment_year_ref:'Assessment 1',assessment_year_high_m:'Assessment 2',synthesis:'Synthesis',report:'Report'};
 const states={waiting:'Waiting',queued:'Queued',idle:'Queued',running:'Running',completed:'Complete',failed:'Failed',blocked:'Blocked',cancelled:'Cancelled'},icons={completed:'✓',running:'◌',failed:'×',blocked:'×',cancelled:'–'};
+let previewLog=null,previewLogPending=false,previewLogAt=0;
+let dataDraft=null;
 let branchCatalog=null,branchLoading=false,runRoots=null;const branchDrafts={};
 let data=null,sending=false,expected='',selected=null,consoleRecord=null,consolePending=false,changeKind='data',lastRefresh=0,refreshing=false,previewKey=null,previewTimer=null;
 const time=t=>t?new Date(t).toLocaleTimeString('en-GB',{hour12:false}):'';
@@ -11,6 +13,7 @@ function pendingBranches(){return Object.fromEntries(Object.entries(branchDrafts
 function affected(){
  if(!data||(!selected&&!runRoots&&!Object.keys(pendingBranches()).length))return new Set();
  const roots=runRoots&&(sending||expected||data.status!=='completed')?runRoots:[...Object.keys(pendingBranches()),...(selected?[selected]:[])];
+ if(dataDraft!==null&&dataDraft!=='new'&&Number(dataDraft)!==Number(data.database_version))return new Set(data.stages.map(s=>s.key));
  if(roots.includes('data')||(data.has_run===false&&!data.baseline_available))return new Set(data.stages.map(s=>s.key));
  const result=new Set(roots);
  let changed=true;while(changed){changed=false;for(const s of data.stages)if(!result.has(s.key)&&(s.parents||[]).some(p=>result.has(p))){result.add(s.key);changed=true;}}
@@ -39,53 +42,93 @@ function node(key){
 }
 function qualityRecord(){const q=data?.data_intake?.quality_check;if(!q)return [];const stamp=time(data.data_intake.checked_at?data.data_intake.checked_at*1000:null),lines=[(stamp?stamp+'  ':'')+'CHECK  incoming release '+q.proposed_version+' · '+q.rows_received+' records'];for(const e of q.errors||[]){lines.push('FAIL  '+e.code+' · '+e.message);if(e.failed_records)lines.push('      '+e.failed_records+' record(s) failed');for(const example of e.examples||[])lines.push('      '+example.set_id+' · '+(e.field||'value')+' = '+JSON.stringify(example.observed));}if(q.accepted)lines.push('PASS  '+(q.checks||[]).join(' · '));lines.push(q.accepted?'ACCEPT  validated records may be published':'RETURN  correct the data and resubmit · no release or analysis run');if(q.rule_version)lines.push('RULES  v'+q.rule_version+' · '+(q.rules_sha256||'').slice(0,12));return lines;}
 function hidePreview(){clearTimeout(previewTimer);previewKey=null;$('preview').hidden=true;}
-function showPreview(key){if(!data||sending)return;previewKey=key;const s=data.stages.find(s=>s.key===key),steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),step=s?steps.find(x=>x.number===s._step_number):null;
- $('preview-title').textContent=names[key]+(key.includes('assessment_')||key.includes('prepare_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
- let lines=[];
- if(key==='data'){const q=data.data_intake?.quality_check;$('preview-state').textContent='Database release '+(data.database_version||'');lines=q?(q.accepted?['Quality check passed. Accepted records form an immutable snapshot.']:qualityRecord().slice(1,-2)):['New data → quality check → release → GitHub workflow.'];if(q&&!q.accepted)$('preview-state').textContent='QC failed · Database · incoming '+q.proposed_version;}
- else if(data.has_run===false){$('preview-state').textContent='Ready · no active demonstration';lines=['A verified baseline supplies unchanged inputs.','Only this stage and its dependants run.'];}
- else{
-  $('preview-state').textContent=(s.reused?'Reused · verified outputs':states[s.status]||s.status)+' · GitHub #'+data.number;
-  if(s.reused)lines=['Restored outputs passed checksum verification.','This stage was not recalculated in this run.'];
-  else if(expected)lines=['The update is stored. Waiting for the new GitHub run.'];
-  else if(step?.started_at||s.started_at)lines=[time(step?.started_at||s.started_at)+'  '+(s.status==='running'?'Started · running now':'Started'),...(s.completed_at?[time(s.completed_at)+'  Completed']:[])];
-  else lines=['Waiting for '+(s.parents.length?s.parents.map(p=>names[p]).join(' + '):'a runner and the data snapshot')+'.'];
-  if(s.status==='running')lines.push('Live step status from GitHub Actions.');
-  const tags={extract:'EXTRACT',cpue_vessel:'CPUE',cpue_year:'CPUE',prepare_vessel:'INPUT PREPARATION',prepare_year:'INPUT PREPARATION',synthesis:'SYNTHESIS',report:'REPORT'};
-  const tag=tags[key]||'ASSESSMENT';
-  if(!s.reused&&consoleRecord?.run_id===data.run_id&&consoleRecord?.attempt===data.attempt){const matching=consoleRecord.lines.filter(x=>x.includes(tag+' complete:')&&(!key.startsWith('cpue_')||x.includes(key.includes('vessel')?'vessel_adjusted':'year_only'))&&(!key.startsWith('assessment_')||x.includes(key)));if(matching.length)lines.push(matching.at(-1).replace(/^\S+\s*/,''));}
-  if(key==='extract'&&!s.started_at){const setup=steps.find(x=>x.status==='in_progress');if(setup)lines.push('GitHub: '+friendlyStep(setup.name));}
+function placePopup(box,element){
+ const anchor=element.getBoundingClientRect(),gap=12,pad=12;
+ const bounds={left:pad,right:innerWidth-pad,top:document.querySelector('.top').getBoundingClientRect().bottom+8,bottom:innerHeight-pad};
+ const clamp=(value,low,high)=>Math.max(low,Math.min(value,high));
+ box.style.width='';box.style.maxHeight='';
+ const naturalWidth=box.offsetWidth,naturalHeight=box.offsetHeight;
+ const regions=[
+  {side:'right',left:anchor.right+gap,right:bounds.right,top:bounds.top,bottom:bounds.bottom},
+  {side:'left',left:bounds.left,right:anchor.left-gap,top:bounds.top,bottom:bounds.bottom},
+  {side:'below',left:bounds.left,right:bounds.right,top:anchor.bottom+gap,bottom:bounds.bottom},
+  {side:'above',left:bounds.left,right:bounds.right,top:bounds.top,bottom:anchor.top-gap}
+ ];
+ const obstacles=[...document.querySelectorAll('.stage,.data-node,.action-bar')].filter(n=>n!==element).map(n=>n.getBoundingClientRect());
+ const choices=[];
+ for(const region of regions){
+  const availableWidth=region.right-region.left,availableHeight=region.bottom-region.top;
+  if(availableWidth<Math.min(220,naturalWidth)||availableHeight<90)continue;
+  box.style.width=Math.min(naturalWidth,availableWidth)+'px';box.style.maxHeight=availableHeight+'px';
+  const width=box.offsetWidth,height=box.offsetHeight;
+  const left=region.side==='right'?region.left:region.side==='left'?region.right-width:clamp(anchor.left+(anchor.width-width)/2,region.left,region.right-width);
+  const top=region.side==='below'?region.top:region.side==='above'?region.bottom-height:clamp(anchor.top+(anchor.height-height)/2,region.top,region.bottom-height);
+  const covered=obstacles.reduce((sum,r)=>sum+Math.max(0,Math.min(left+width,r.right)-Math.max(left,r.left))*Math.max(0,Math.min(top+height,r.bottom)-Math.max(top,r.top)),0);
+  // Keep the source card clear; prefer a full-sized preview with fewer covered neighbours.
+  const clipped=Math.max(0,naturalWidth*naturalHeight-width*height);
+  choices.push({left,top,width,maxHeight:availableHeight,score:clipped*20+covered});
  }
- const source=s?.code_source;$('preview-source').hidden=!source;$('preview-source').textContent=source?source.repository.replace('kyuhank/','')+' · '+source.branch+' @ '+source.commit.slice(0,8):'';
- $('preview-inputs').hidden=!key.startsWith('prepare_');$('preview-inputs').textContent='Typical inputs: CPUE, catch, length and age compositions, and other assessment data.\nThis demo calculates with CPUE and catch.';
- $('preview-record').textContent=lines.join('\n');$('preview').hidden=false;const anchor=node(key).getBoundingClientRect(),main=document.querySelector('main').getBoundingClientRect(),box=$('preview');box.style.left=Math.min(main.width-box.offsetWidth-12,Math.max(12,anchor.left-main.left+anchor.width/2-box.offsetWidth/2))+'px';const below=anchor.bottom-main.top+8;box.style.top=(below+box.offsetHeight<340?below:Math.max(42,anchor.top-main.top-box.offsetHeight-8))+'px';
+ const best=choices.sort((a,b)=>a.score-b.score)[0];
+ if(!best)return;
+ box.style.width=best.width+'px';box.style.maxHeight=best.maxHeight+'px';box.style.left=best.left+'px';box.style.top=best.top+'px';
+}
+
+function showPreview(key){
+ if(!data||sending||$('sql-view').open)return;previewKey=key;
+ const stage=data.stages.find(s=>s.key===key);
+ $('preview-title').textContent=names[key]+(key.startsWith('assessment_')||key.startsWith('prepare_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
+ let lines=[];
+ if(key==='data'){
+  const q=data.data_intake?.quality_check;$('preview-state').textContent=q&&!q.accepted?'QC failed':'Database · v'+(data.database_version||2023);
+  lines=q&&!q.accepted?qualityRecord().filter(x=>x.startsWith('FAIL')||x.startsWith('RETURN')).slice(0,3):['Select a saved release, or add one checked batch.'];
+ }else{
+  $('preview-state').textContent=(stage.reused?'Reused':states[stage.status]||stage.status)+(data.has_run?' · GitHub #'+data.number:'');
+  const record=previewLog?.run_id===data.run_id&&previewLog?.stage===key?previewLog:null;
+  if(record?.lines.length){lines=record.lines.slice(-3);$('preview-state').textContent=record.source+' · '+(stage.reused?'Reused':states[stage.status]||stage.status);}
+  else lines=stage.reused?['Verified outputs retained.']:stage.status==='waiting'?['Waiting for '+(stage.parents.map(p=>names[p]).join(' + ')||'the selected data release')+'.']:['Reading the GitHub execution record…'];
+  loadPreviewLog(key);
+ }
+ $('preview-record').textContent=lines.join('\n');$('preview').hidden=false;placePopup($('preview'),node(key));
+}
+async function loadPreviewLog(key){
+ if(!data.has_run||previewLogPending||(previewLog?.stage===key&&previewLog?.run_id===data.run_id&&Date.now()-previewLogAt<2500))return;
+ previewLogPending=true;const run=data.run_id;let updated=false;
+ try{const r=await fetch('/api/stage-log?stage='+key,{cache:'no-store'});if(r.ok){const record=await r.json();if(data.run_id===run){previewLog=record;previewLogAt=Date.now();updated=true;}}}catch{}finally{previewLogPending=false;}
+ if(updated&&previewKey===key&&data.run_id===run&&previewLog?.stage===key)showPreview(key);
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){hidePreview();$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}});
 function links(){
  const root=$('chain');root.querySelector('.edges')?.remove();if(!data)return;
  const impact=affected(),stages=new Map(data.stages.map(s=>[s.key,s])),rect=root.getBoundingClientRect(),ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
- svg.classList.add('edges');svg.setAttribute('viewBox',`0 0 ${rect.width} ${rect.height}`);
+ svg.classList.add('edges');
+ const defs=document.createElementNS(ns,'defs');
+ for(const [id,color] of Object.entries({base:'#657f91',muted:'#9bb0bc',selected:'#0085ca',active:'#b77b1c'})){
+  const marker=document.createElementNS(ns,'marker');for(const [name,value] of Object.entries({id:'arrow-'+id,viewBox:'0 0 8 8',refX:'7',refY:'4',markerWidth:'7',markerHeight:'7',markerUnits:'userSpaceOnUse',orient:'auto'}))marker.setAttribute(name,value);
+  const head=document.createElementNS(ns,'path');head.setAttribute('d','M1 1L7 4L1 7');head.setAttribute('style','fill:none;stroke:'+color+';stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round');marker.append(head);defs.append(marker);
+ }svg.append(defs);svg.setAttribute('viewBox',`0 0 ${rect.width} ${rect.height}`);
  for(const child of data.stages)for(const parent of child.key==='extract'?['data']:child.parents||[]){
   const a=root.querySelector(`[data-key="${parent}"]`)?.getBoundingClientRect(),b=root.querySelector(`[data-key="${child.key}"]`)?.getBoundingClientRect();if(!a||!b)continue;
   // Highlight the selected execution path, not every input feeding an affected stage.
   const inPath=impact.has(child.key)&&(impact.has(parent)||(parent==='data'&&selected==='data'));
   const reusedInput=child.reused||stages.get(parent)?.reused;
   const muted=selected?!inPath:!!reusedInput;
-  const x=a.right-rect.left,y=a.top+a.height/2-rect.top,X=b.left-rect.left,Y=b.top+b.height/2-rect.top,m=(x+X)/2,path=document.createElementNS(ns,'path');
+  const port=child.key==='synthesis'?(child.parents.indexOf(parent)+1)/(child.parents.length+1):.5;
+  const x=a.right-rect.left+1,y=a.top+a.height/2-rect.top,X=b.left-rect.left-5,Y=b.top+b.height*port-rect.top,m=(x+X)/2,path=document.createElementNS(ns,'path');
   path.dataset.from=parent;path.dataset.to=child.key;
   if(parent==='extract'&&child.key.startsWith('prepare_')){
-   const top=child.key==='prepare_vessel',rail=top?3:rect.height-3,target=b.left-rect.left+b.width*.6,end=top?b.top-rect.top:b.bottom-rect.top;
-   path.classList.add('data-edge');path.setAttribute('d',`M${x},${y}C${x+12},${y} ${x+12},${rail} ${x+28},${rail}H${target-10}Q${target},${rail} ${target},${end} M${target-3},${end+(top?-4:4)}L${target},${end}L${target+3},${end+(top?-4:4)}`);
+   const top=child.key==='prepare_vessel',rail=top?3:rect.height-3,target=b.left-rect.left+b.width*.6,end=top?b.top-rect.top-5:b.bottom-rect.top+5;
+   path.classList.add('data-edge');path.setAttribute('d',`M${x},${y}C${x+12},${y} ${x+12},${rail} ${x+28},${rail}H${target-10}Q${target},${rail} ${target},${end}`);
    const label=document.createElementNS(ns,'text');label.classList.add('edge-label');label.classList.toggle('muted',muted);label.setAttribute('x',x+32);label.setAttribute('y',rail+(top?-5:12));label.textContent='Catch · length/age comps · …';svg.append(label);
-  }else path.setAttribute('d',`M${x},${y}C${m},${y} ${m},${Y} ${X},${Y} M${X-4},${Y-3}L${X},${Y}L${X-4},${Y+3}`);
+  }else path.setAttribute('d',`M${x},${y}C${m},${y} ${m},${Y} ${X},${Y}`);
   path.classList.toggle('preview',!!selected&&inPath);
   path.classList.toggle('muted',muted);
-  path.classList.toggle('active',!expected&&!sending&&!muted&&!reusedInput&&child.status==='running');
+  const running=!expected&&!sending&&!muted&&!reusedInput&&child.status==='running';
+  path.classList.toggle('active',running);path.setAttribute('marker-end','url(#arrow-'+(muted?'muted':running?'active':selected&&inPath?'selected':'base')+')');
   svg.append(path);
  }
  root.append(svg);
 }
-new ResizeObserver(()=>requestAnimationFrame(links)).observe($('chain'));
+new ResizeObserver(()=>requestAnimationFrame(()=>{links();if(previewKey)showPreview(previewKey);if($('sql-view').open)placePopup($('sql-view'),node('extract'));})).observe($('chain'));
 function friendlyStep(name){if(name==='Retrieve locked analysis modules')return 'Load six code repositories at locked commits';if(name==='Prepare the pinned Docker environment')return 'Pull container image';if(name==='Checkout')return 'Check out analysis code';if(name==='Checkout source data')return 'Check out data settings';if(name==='Fetch versioned database snapshot')return 'Download the recorded data release';if(name==='Set up job')return 'Start runner';if(name==='Save the complete workflow outputs')return 'Save outputs';const stage=data?.stages.find(s=>s._step_number===data.execution?.jobs?.[0]?.steps.find(x=>x.name===name)?.number);return stage?names[stage.key]+(name.endsWith(' · reused')?' · reused':''):name;}
 function showConsole(){if(!data)return;if(data.has_run===false){$('console-title').textContent='Ready for a new demonstration';$('console-lines').textContent='The previous execution records have been cleared.';$('console-link').removeAttribute('href');return;}const steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),actual=consoleRecord?.run_id===data.run_id&&consoleRecord?.attempt===data.attempt;let lines=[];if(actual){$('console-title').textContent='GitHub console · completed run';lines=consoleRecord.lines.map(line=>line.replace(/^(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\s*/,(_,t)=>time(t)+'  '));}else{$('console-title').textContent='Live GitHub step record';for(const s of steps)if(s.started_at&&['in_progress','completed'].includes(s.status))lines.push(time(s.started_at)+'  '+(s.status==='completed'?(s.conclusion==='success'?'✓':s.name.endsWith(' · reused')?'↺':'×'):'▶')+' '+s.name);if(!lines.length)lines=['Waiting for GitHub to assign a runner.'];}if(expected){$('console-title').textContent='Update stored · waiting for GitHub';lines=[expected.startsWith('db-')?'Database release '+expected.slice(3):'Settings commit '+expected.slice(0,8),'The update triggers the workflow in the analysis repository.'];}const qc=data.data_intake?.quality_check,qcView=qc&&(!qc.accepted||selected==='data');if(qcView){$('console-title').textContent='Data quality check · Database';lines=qualityRecord();}const text=lines.join('\n'),el=$('console-lines');if(el.textContent!==text){el.textContent=text;el.scrollTop=el.scrollHeight;}$('console-link').href=data.run_url;$('console-link').textContent=qcView&&!qc.accepted?'Previous GitHub run ↗':'View run ↗';}
 async function loadConsole(){if(data.has_run===false||consolePending||data.status!=='completed'||(consoleRecord?.run_id===data.run_id&&consoleRecord?.attempt===data.attempt))return;consolePending=true;try{const r=await fetch('/api/console',{cache:'no-store'});if(r.ok){const next=await r.json();if(next.ready&&next.lines.length)consoleRecord=next;}}catch{}finally{consolePending=false;showConsole();}}
@@ -98,9 +141,12 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  $('selection-title').textContent=key==='data'?(replayData?'Replay data update':'New data'):names[key]+(key.startsWith('prepare_')||key.startsWith('assessment_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
  $('progress').textContent=(data.has_run===false&&!data.baseline_available&&key!=='data'?'Prepare initial inputs → ':key==='data'?(replayData?'Replay the accepted data update → ':'Add one batch → QC → '):pendingCount>1?pendingCount+' starting stages → ':'Run this stage → ')+count+' stages run'+(count<data.stages.length?' · '+(data.stages.length-count)+' kept':'');
  for(const item of ['data',...data.stages.map(s=>s.key)])sourceLink(item);
+ $('data-picker').hidden=key!=='data';
+ if(key==='data'){const choices=[...(data.data_versions||[2023]).map(v=>[String(v),'Release '+v]),['new',Number(data.latest_database_version)>=2024?'Replay new-data update':'Add checked batch']];const signature=JSON.stringify(choices);if($('data-version').dataset.choices!==signature){$('data-version').replaceChildren(...choices.map(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;return option;}));$('data-version').dataset.choices=signature;}$('data-version').value=dataDraft||'new';}
  $('sql-button').hidden=key!=='extract';$('sql-button').disabled=!nextSource('extract');
  drawBranches(key,busy);
- $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?(replayData?'Replay data update →':'Add data + run →'):pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';$('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||!data.database_connected;$('invalid').disabled=busy||!!stale;
+ $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?(replayData?'Replay data update →':'Add data + run →'):pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&dataDraft&&dataDraft!=='new'){$('selection-title').textContent='Data release '+dataDraft;$('progress').textContent='Restore this snapshot → 11 stages run';$('run').textContent=busy?'Starting…':'Run with v'+dataDraft+' →';}
+ $('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||!data.database_connected;$('invalid').disabled=busy||!!stale;
  $('record-dot').className=$('live-dot').className;$('verified').textContent=time(data.source?.last_success);$('message').className='';
  $('message').textContent=sending?(changeKind==='data'?'Validate and publish incoming data…':'Commit the selected update…'):expected?'Update stored → waiting for the next GitHub run':stale?'Connection interrupted · showing the last verified run':active?'Running on GitHub · '+(data.stages.filter(s=>s.status==='running').map(s=>names[s.key]).join(' + ')||friendlyStep(active.name)):data.status==='completed'?(data.conclusion==='success'?'✓ Outputs saved · report ready':'GitHub run '+data.conclusion):'GitHub is assigning a runner…';
  if(data.has_run===false&&!busy){$('message').textContent='Ready · verified baseline inputs available';$('run-link').removeAttribute('href');}
@@ -129,9 +175,9 @@ async function publish(invalid=false){
  const stage=selectedKey(),choices=pendingBranches();
  if(stage!=='data'&&branchCatalog?.options[stage])choices[stage]=$('branch').value;
  if(!invalid&&!branchCatalog){notice('Loading registered branches. Please try again in a moment.');loadBranches();return;}
- runRoots=[...new Set([stage,...Object.keys(choices)])];hidePreview();sending=true;changeKind=stage;$('notice').hidden=true;draw();
+ runRoots=[...new Set([dataDraft&&dataDraft!=='new'&&Number(dataDraft)!==Number(data.database_version)?'data':stage,...Object.keys(choices)])];hidePreview();sending=true;changeKind=stage;$('notice').hidden=true;draw();
  try{
-  const r=await fetch(invalid?'/api/check-invalid-data':'/api/run',{method:'POST',headers:{'Content-Type':'application/json','X-Workshop-Action':'publish-synthetic-data','X-Workshop-Request':crypto.randomUUID()},body:invalid?'{}':JSON.stringify({start:stage,branches:choices})}),result=await r.json();
+  const r=await fetch(invalid?'/api/check-invalid-data':'/api/run',{method:'POST',headers:{'Content-Type':'application/json','X-Workshop-Action':'publish-synthetic-data','X-Workshop-Request':crypto.randomUUID()},body:invalid?'{}':JSON.stringify({start:stage,branches:choices,...(dataDraft&&dataDraft!=='new'?{data_version:Number(dataDraft)}:{})})}),result=await r.json();
   if(!r.ok)throw Error(result.detail||'Update failed');
   expected=result.published===false?'':result.commit||(result.database_version?'db-'+result.database_version:'');
   if(result.published===false){$('console').hidden=false;$('logs').setAttribute('aria-expanded','true');$('logs').textContent='Hide record';}
@@ -140,7 +186,7 @@ async function publish(invalid=false){
 $('sql-close').onclick=()=>$('sql-view').close();
 $('sql-button').onclick=async()=>{
  hidePreview();const source=nextSource('extract');if(!source||source.repository!=='kyuhank/cpue-demo-extract'||!/^[a-f0-9]{40}$/.test(source.commit))return;
- $('sql-view').showModal();$('sql-source').textContent=source.repository+' · '+source.branch+' @ '+source.commit.slice(0,8);$('sql-content').textContent='Loading the recorded source…';
+ $('sql-view').showModal();$('sql-source').textContent=source.repository+' · '+source.branch+' @ '+source.commit.slice(0,8);$('sql-content').textContent='Loading the recorded source…';placePopup($('sql-view'),node('extract'));
  try{
   const blocks=await Promise.all(['extract.sql','extract-catch.sql'].map(async(name)=>{
    const response=await fetch('https://raw.githubusercontent.com/'+source.repository+'/'+source.commit+'/'+name,{signal:AbortSignal.timeout(12000)});
@@ -149,8 +195,10 @@ $('sql-button').onclick=async()=>{
    link.textContent=name+' ↗';link.href='https://github.com/'+source.repository+'/blob/'+source.commit+'/'+name;link.target='_blank';link.rel='noopener';heading.append(link);pre.textContent=text;section.append(heading,pre);return section;
   }));$('sql-content').replaceChildren(...blocks);
  }catch(error){$('sql-content').textContent=error.message;}
+ if($('sql-view').open)placePopup($('sql-view'),node('extract'));
 };
-$('run').onclick=()=>publish();$('invalid').onclick=()=>publish(true);$('logs').onclick=()=>{$('console').hidden=!$('console').hidden;$('logs').setAttribute('aria-expanded',String(!$('console').hidden));$('logs').textContent=$('console').hidden?'Show record':'Hide record';showConsole();};$('dismiss').onclick=()=>{$('notice').hidden=true;};
+$('data-version').onchange=()=>{dataDraft=$('data-version').value;draw();};
+ $('run').onclick=()=>publish();$('invalid').onclick=()=>publish(true);$('logs').onclick=()=>{$('console').hidden=!$('console').hidden;$('logs').setAttribute('aria-expanded',String(!$('console').hidden));$('logs').textContent=$('console').hidden?'Show record':'Hide record';showConsole();};$('dismiss').onclick=()=>{$('notice').hidden=true;};
 if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');refresh();loadBranches();setInterval(refresh,2000);
 async function heartbeat(){try{const r=await fetch('/api/presentation-info',{cache:'no-store'});if(r.ok&&(await r.json()).presentation==='cpue-workshop'&&parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');}catch{}}
 heartbeat();setInterval(heartbeat,4000);

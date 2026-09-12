@@ -1,0 +1,64 @@
+"""Submit, check, and prepare the fixed synthetic batch in separate Actions jobs."""
+import hashlib, html, json, os, sys, tarfile
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.request import Request, urlopen
+from urllib.parse import urlencode
+ROOT=Path(__file__).resolve().parents[1]
+IMAGE=os.getenv('TOY_CONTAINER_IMAGE','local')
+def digest(value):return hashlib.sha256(value).hexdigest()
+def canonical(value):return json.dumps(value,separators=(',',':'),ensure_ascii=True).encode()
+def check(batch):
+    errors=[];seen=set()
+    for row in batch['sets']:
+        ident,year,vessel,hooks,catch=row
+        for condition,code,field,message,value in [
+            (ident not in seen,'duplicate_id','set_id','Submission identifiers must be unique.',ident),
+            (year==2024,'year','year','Every submitted record must be from 2024.',year),
+            (isinstance(vessel,str) and bool(vessel),'vessel','vessel','A vessel identifier is required.',vessel),
+            (isinstance(hooks,int) and hooks>0,'positive_effort','hooks','Hooks must be greater than zero.',hooks),
+            (isinstance(catch,int) and catch>=0,'catch','catch_n','Catch must be non-negative.',catch)]:
+            if not condition:errors.append({'code':code,'field':field,'message':message,'failed_records':1,'examples':[{'set_id':ident,'observed':value}]})
+        seen.add(ident)
+    if not batch['sets'] or not isinstance(batch['catch'],(int,float)) or batch['catch']<0:errors.append({'code':'annual_catch','message':'Valid records and annual catch are required.'})
+    return {'accepted':not errors,'proposed_version':2024,'rows_received':len(batch['sets']),'errors':errors,'checks':['unique identifiers','submission year','vessel identifiers','positive effort','non-negative catch'],'rule_version':1,'rules_sha256':digest(Path(__file__).read_bytes())}
+def write(key,files,success=True):
+    folder=ROOT/'stages'/key;out=folder/'outputs';out.mkdir(parents=True,exist_ok=True)
+    for name,value in files.items():(out/name).write_text(json.dumps(value,indent=2)+'\n')
+    title={'submission':'Data submission','qc':'Data quality check','ingest':'Prepare & load'}[key]
+    owner='Korea' if key=='submission' else 'Jessica' if key=='qc' else 'Tiffany'
+    body='<h1>'+title+'</h1><p>Owner · '+owner+'</p><p>'+('Complete' if success else 'Returned to submitter · correction required')+'</p>'
+    for name,value in files.items():body+='<h2>'+html.escape(name)+'</h2><pre>'+html.escape(json.dumps(value,indent=2))+'</pre>'
+    (out/'results.html').write_text('<!doctype html><html lang="en"><meta charset="utf-8"><style>body{font:16px/1.5 Arial;color:#12304c;max-width:960px;margin:30px auto}pre{white-space:pre-wrap;font-size:12px}h1{font:34px Georgia}</style>'+body+'<p>Synthetic demonstration data.</p></html>')
+    record={'stage':key,'run_id':os.getenv('GITHUB_RUN_ID','local'),'attempt':os.getenv('GITHUB_RUN_ATTEMPT','1'),'code_commit':os.getenv('TOY_CODE_COMMIT','local'),'container':IMAGE,'status':'completed' if success else 'failed','completed_at':datetime.now(timezone.utc).isoformat(),'outputs':{p.name:digest(p.read_bytes()) for p in out.iterdir()}}
+    (folder/'record.json').write_text(json.dumps(record,indent=2)+'\n')
+    name=f'stage-{record["attempt"]}-{key}.tar.gz'
+    with tarfile.open(ROOT/name,'w:gz') as archive:archive.add(folder,arcname='stages/'+key)
+def main():
+    key=sys.argv[1]
+    if key=='submission':
+        batch=json.loads((ROOT/'supabase/functions/workshop-api/batches.json').read_text())['2024']
+        if os.getenv('WORKSHOP_INTAKE_MODE')=='invalid':batch['sets'][0][3]=0
+        write(key,{'submission.json':batch,'receipt.json':{'owner':'Korea','release':2024,'rows':len(batch['sets']),'sha256':digest(canonical(batch))}})
+        print(f'SUBMISSION complete: Korea; {len(batch["sets"])} records; receipt and checksum saved',flush=True)
+    elif key=='qc':
+        batch=json.loads((ROOT/'stages/submission/outputs/submission.json').read_text());quality=check(batch)
+        write(key,{'quality.json':quality},quality['accepted'])
+        for error in quality['errors']:print('::error title=QC returned to Korea::'+error['message']+' '+json.dumps(error.get('examples',[])),flush=True)
+        print('QC '+('complete: accepted; release may be prepared' if quality['accepted'] else 'FAILED: returned to Korea; correct and resubmit; loading and extraction blocked'),flush=True)
+        if not quality['accepted']:raise SystemExit(1)
+    elif key=='ingest':
+        batch=json.loads((ROOT/'stages/submission/outputs/submission.json').read_text());quality=json.loads((ROOT/'stages/qc/outputs/quality.json').read_text())
+        if not quality['accepted'] or not check(batch)['accepted']:raise SystemExit('QC did not pass')
+        batch['sets']=sorted(batch['sets'],key=lambda r:r[0]);sha=digest(canonical(batch))
+        print('PREPARE: normalise fields; sort record identifiers; verify the accepted batch checksum',flush=True)
+        audience='cpue-workshop-intake'
+        endpoint=os.environ['ACTIONS_ID_TOKEN_REQUEST_URL']+'&'+urlencode({'audience':audience})
+        with urlopen(Request(endpoint,headers={'Authorization':'Bearer '+os.environ['ACTIONS_ID_TOKEN_REQUEST_TOKEN']}),timeout=20) as response:token=json.load(response)['value']
+        payload=canonical({'request':os.environ['WORKSHOP_REQUEST_ID'],'batch_sha256':sha})
+        endpoint=os.environ['SUPABASE_URL']+'/functions/v1/workshop-api/api/accept-intake'
+        with urlopen(Request(endpoint,data=payload,headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'}),timeout=45) as response:release=json.load(response)
+        write(key,{'release.json':release,'prepared.json':{'rows':len(batch['sets']),'sha256':sha,'version':2024}})
+        print('LOAD complete: checked release v2024 stored in PostgreSQL; extraction unlocked',flush=True)
+    else:raise SystemExit('Unknown intake stage')
+if __name__=='__main__':main()

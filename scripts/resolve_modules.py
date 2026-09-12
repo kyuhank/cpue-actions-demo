@@ -14,6 +14,8 @@ FILES = {
     'extract': {'extract.py': 'extract.py', 'extract.sql': 'extract.sql', 'extract-catch.sql': 'extract-catch.sql'},
     'cpue_vessel': {'cpue.py': 'cpue_vessel.py'},
     'cpue_year': {'cpue.py': 'cpue_year.py'},
+    'cpue_summary': {'cpue_summary.py': 'cpue_summary.py'},
+    'cpue_report': {'cpue_report.py': 'cpue_report.py'},
     'prepare_vessel': {'prepare_inputs.py': 'prepare_vessel.py'},
     'prepare_year': {'prepare_inputs.py': 'prepare_year.py'},
     **{key: {'assessment.py': key + '.py'} for key in ('assessment_vessel_ref', 'assessment_vessel_high_m', 'assessment_year_ref', 'assessment_year_high_m')},
@@ -62,7 +64,7 @@ def resolve():
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             for member in archive.infolist():
                 name = member.filename.partition('/')[2]
-                if name in {'extract.py', 'extract.sql', 'extract-catch.sql', 'cpue.py', 'prepare_inputs.py', 'assessment.py', 'synthesis.py', 'collect_results.py', 'report.py', 'reproduction.py', 'model.json'}:
+                if name in {'extract.py', 'extract.sql', 'extract-catch.sql', 'cpue.py', 'cpue_summary.py', 'cpue_report.py', 'prepare_inputs.py', 'assessment.py', 'synthesis.py', 'collect_results.py', 'report.py', 'reproduction.py', 'model.json'}:
                     if member.file_size > 512 * 1024 or name in files:
                         raise ValueError('Invalid module source file')
                     files[name] = archive.read(member)

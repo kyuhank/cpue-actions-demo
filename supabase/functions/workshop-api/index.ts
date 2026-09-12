@@ -1,4 +1,5 @@
-import {parseSelection,branchUpdates,runBranches,changeBranch,branches,change,changeable,current,consoleLines,stageLog,output,outputStage,outputNames,stageOutputs,ensureBranch} from './github.ts';
+import {acceptIntake} from './intake.ts';
+import {parseSelection,branchUpdates,runBranches,changeBranch,branches,change,changeable,current,consoleLines,stageLog,output,outputStage,outputNames,stageOutputs,ensureBranch,dispatch,outputKeys} from './github.ts';
 import {rpc,cached,invalidate} from './database.ts';
 import {maintain,observe,pendingUpdate} from './lifecycle.ts';
 import batches from './batches.json' with {type:'json'};
@@ -17,6 +18,10 @@ async function status(){
    if(m.github_run_id==s.run_id&&(m.configuration?.git_commit||m.workflow_plan?.trigger_commit)===s.commit){s.database_version=Number(m.source_version);if(!intake&&m.data_release?.quality_check)intake={quality_check:m.data_release.quality_check,published:true,checked_at:Date.parse(m.data_release.published_at||s.created_at)/1000};}
   }catch{/* The run state remains available while the report is being published. */}
  }
+ const qcJob=s.intake_stages?.find((j:any)=>j.key==='qc');
+ if(qcJob&&['completed','failed'].includes(qcJob.status)){
+  try{const files=await cached('intake:'+qcJob.source_id,600,()=>stageOutputs(qcJob.source_id));intake={quality_check:JSON.parse(files['quality.json']),published:s.intake_stages.some((j:any)=>j.key==='ingest'&&j.status==='completed'),checked_at:Date.parse(s.created_at)/1000};}catch{}
+ }
  if(!s.has_run&&intake&&(intake.published||intake.checked_at*1000<=Date.parse(demo.last_reset_at||'1970-01-01')))intake=null;
  return {...s,demo,data_versions:database.version>=2024?[2021,2022,2023,2024]:[2021,2022,2023],latest_database_version:database.version,database_connected:true,data_intake:intake,session:{can_update:can,remaining:limits.remaining,next_update:limits.next_update,message:!enabled()?'Cloud execution is awaiting the owner’s restricted GitHub connection.':demo.phase==='cleaning'?'Resetting the demonstration. The next run will start from the baseline.':pending?'The update is stored; waiting for GitHub to acknowledge the next run.':limits.remaining===0?'Daily limit reached. You can still inspect the current run.':!can?'Wait for the current run and the short update interval.':`${limits.remaining} shared updates available today.`}};
 }
@@ -24,6 +29,10 @@ export async function handle(request:Request){
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
  const u=new URL(request.url),path=u.pathname.split('/workshop-api')[1]||'/';
  try{
+  if(path==='/api/accept-intake'){
+   if(request.method!=='POST'||!enabled())return reply({detail:'Forbidden'},403);
+   try{return reply(await acceptIntake(request));}catch{return reply({detail:'The active, checked intake run could not be verified.'},403);}
+  }
   if(path==='/api/maintenance'){
    const key=Deno.env.get('WORKSHOP_WEBHOOK_SECRET');
    if(request.method!=='POST'||!key||request.headers.get('X-Workshop-Webhook')!==key)return reply({detail:'Forbidden'},403);
@@ -45,7 +54,7 @@ export async function handle(request:Request){
    }
 
    if(path==='/api/stage-log'){
-    const key=u.searchParams.get('stage')||'';if([...u.searchParams.keys()].some(k=>k!=='stage')||!changeable.has(key as any))return reply({detail:'Unknown stage.'},400);
+    const key=u.searchParams.get('stage')||'';if([...u.searchParams.keys()].some(k=>k!=='stage')||!outputKeys.has(key as any))return reply({detail:'Unknown stage.'},400);
     const s=await status();return reply(await cached('stage-log:'+s.run_id+':'+s.attempt+':'+key,s.status==='completed'?600:2,()=>stageLog(s,key)));
    }
    if(path==='/api/console'){const s=await status();if(!s.ready)return reply({ready:false,lines:[]});return reply(await cached('console:'+s.run_id+':'+s.attempt,3600,()=>consoleLines(s)));}
@@ -85,25 +94,10 @@ export async function handle(request:Request){
     const start=kind==='data'||selection.data_version!==s.database_version?'extract':kind;
     result={...await runBranches(start,selection.branches,id,true,selection.data_version),database_version:selection.data_version,published:true};
    }else if(kind==='data'||kind==='invalid'){
-    const snapshot=await rpc('cpue_snapshot',{p_version:null}),year=2024;
-    if(kind==='data'&&snapshot.version>=year){
-     // One added batch only. A replay recalculates the already accepted release.
-     if(snapshot.version!==year)throw Error('Reset the demonstration before replaying its fixed data update.');
-     await rpc('workshop_demo_start',{p_request:id});
-     const replay=await runBranches('extract',selection?.branches||{},id,true,year);
-     result={...replay,replayed:true,published:true,year,database_version:year};
-    }else{
-     const batch=structuredClone((batches as any)[year]);
-     if(kind==='invalid')batch.sets[0][3]=0;
-     const quality=await rpc('cpue_check_year',{p_year:year,p_sets:batch.sets,p_catch:batch.catch});
-     if(!quality.accepted)result={quality_check:quality,published:false};
-     else{
-      await rpc('workshop_demo_start',{p_request:id});await ensureBranch();
-      await runBranches('extract',selection?.branches||{},id,false,year);
-      const released=await rpc('cpue_append_year',{p_year:year,p_sets:batch.sets,p_catch:batch.catch});
-      result={...released,quality_check:released.quality_check,published:true,year,database_version:released.version};
-     }
-    }
+    await rpc('workshop_demo_start',{p_request:id});
+    const mode=kind==='invalid'?'invalid':'valid';
+    result={...await runBranches('extract',selection?.branches||{},id,false,2024),request:id,intake_mode:mode,published:true,database_version:2024};
+    await dispatch(2024,mode,id);
    }else{await rpc('workshop_demo_start',{p_request:id});result=selection?await runBranches(kind,selection.branches,id):branchMatch?await changeBranch(kind,branchMatch[2],id):await change(kind);}
    result.previous_run=s.run_id;
    await rpc('workshop_finish',{p_id:id,p_result:result});await invalidate();return reply(result,202);

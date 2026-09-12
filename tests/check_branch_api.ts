@@ -54,8 +54,8 @@ Deno.test('Every stage can choose independently; a combined request keeps other 
  for(const [key] of definitions){chosen[key]=Object.keys(catalog[key]).at(-1)!;}
  const parsed=parseSelection(JSON.stringify({start:'cpue_vessel',branches:chosen}));
  const updates=branchUpdates(parsed.start,parsed.branches,available);
- assert(Object.keys(updates).length===11);
- for(const [key,branch] of Object.entries(chosen))assert(updates[key].commit===catalog[key][branch].commit);
+ assert(Object.keys(updates).length===Object.entries(chosen).filter(([k,b])=>k==='cpue_vessel'||b!==available.sources[k].branch).length);
+ for(const [key,branch] of Object.entries(chosen))assert((updates[key]||available.sources[key]).commit===catalog[key][branch].commit);
  const mixed=branchUpdates('cpue_vessel',{cpue_vessel:'model-a-dev',assessment_year_ref:'structure-1-dev'},available);
  assert(Object.keys(mixed).length===2&&mixed.cpue_vessel.branch!==mixed.assessment_year_ref.branch);
  for(const value of [{start:'private',branches:{}},{start:'data',branches:{private:'main'}},{start:'extract',branches:{extract:{commit:'a'.repeat(40)}}},{start:'extract',branches:{extract:'main'},repo:'private'},null]){

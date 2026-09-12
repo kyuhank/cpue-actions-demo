@@ -4,6 +4,8 @@ export const DEMO_BRANCH = 'demo-runtime';
 export const definitions = [
  ['extract','01 Extract',[]], ['cpue_vessel','02 CPUE: year + vessel',['extract']],
  ['cpue_year','02 CPUE: year only',['extract']],
+ ['cpue_summary','02 CPUE results summary',['cpue_vessel','cpue_year']],
+ ['cpue_report','02 CPUE report',['cpue_summary']],
  ['prepare_vessel','03 Prepare inputs: vessel',['extract','cpue_vessel']],
  ['prepare_year','03 Prepare inputs: year',['extract','cpue_year']],
  ['assessment_vessel_ref','04 Assessment: vessel, lower M',['prepare_vessel']],
@@ -14,8 +16,12 @@ export const definitions = [
  ['report','06 Report',['synthesis']],
 ] as const;
 export const changeable = new Set(definitions.map(x=>x[0]));
+export const intakeKeys=new Set(['submission','qc','ingest']);
+export const outputKeys=new Set([...changeable,...intakeKeys]);
 export function outputNames(key:string):string[]{
  const common=['results.html','manifest.json','record.json'];
+ if(intakeKeys.has(key))return ['submission.json','receipt.json','quality.json','release.json','prepared.json',...common];
+ if(['cpue_summary','cpue_report'].includes(key))return ['cpue.csv','comparison.csv','cpue.svg','report.html',...common];
  if(key==='extract')return ['sets.csv','catch.csv','extract.sql','extract-catch.sql',...common];
  if(key.startsWith('cpue_'))return ['cpue.csv','cpue-diagnostics.txt','cpue-diagnostics.json',...common];
  if(key.startsWith('prepare_'))return ['assessment-input.csv','catch.csv','cpue.csv',...common];
@@ -23,7 +29,7 @@ export function outputNames(key:string):string[]{
  if(['synthesis','report'].includes(key))return [...(key==='report'?['report.html']:[]),'cpue.svg','biomass.svg','summary.csv','biomass.csv','cpue.csv',...common];
  return [];
 }
-export function outputStage(source:string){const match=source.match(/^(\d+)-(\d+)-([a-z_]+)$/);return match&&changeable.has(match[3] as any)?match:null;}
+export function outputStage(source:string){const match=source.match(/^(\d+)-(\d+)-([a-z_]+)$/);return match&&outputKeys.has(match[3] as any)?match:null;}
 export async function github(path:string, method='GET', body?:unknown, allowMissing=false):Promise<Response> {
  const token=Deno.env.get('WORKSHOP_GITHUB_TOKEN');
  const headers:Record<string,string>={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'cpue-workshop','Content-Type':'application/json'};
@@ -46,7 +52,8 @@ export function mapRun(run:any,jobs:any[]){
   states[key]=state;
   return {key,label:label.slice(3),parents,status:state,reused,source_id:`${run.id}-${run.run_attempt}-${key}`,started_at:distributed?job?.started_at:step?.started_at,completed_at:distributed?job?.completed_at:step?.completed_at,html_url:job?.html_url,_job_id:job?.id,_step_number:step?.number};
  });
- return {ready:true,has_run:true,stages,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
+ const intake_stages=[['submission',[]],['qc',['submission']],['ingest',['qc']]].map(([key,parents])=>{const job=jobs.find(j=>j.name?.includes('['+key+']'));return {key,parents,status:job?.status==='in_progress'?'running':job?.conclusion==='success'?'completed':job?.conclusion==='failure'?'failed':job?.conclusion==='skipped'?'blocked':'waiting',skipped:job?.conclusion==='skipped',source_id:`${run.id}-${run.run_attempt}-${key}`,_job_id:job?.id,html_url:job?.html_url};});
+ return {ready:true,has_run:true,stages,intake_stages,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
  trigger_message:run.display_title.startsWith('Database version ')?run.display_title:(run.head_commit?.message||run.display_title).split('\n')[0].slice(0,160),database_version:/^Database version 20\d{2}$/.test(run.display_title)?Number(run.display_title.slice(-4)):null,
  execution:{mode:distributed?'module_jobs':'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};
 }
@@ -104,9 +111,9 @@ export async function ensureBranch(){
  const base=await json('git/ref/heads/main');
  await github('git/refs','POST',{ref:'refs/heads/'+DEMO_BRANCH,sha:base.object.sha});
 }
-export async function dispatch(version?:number){
+export async function dispatch(version?:number,intakeMode='none',request=''){
  await ensureBranch();
- await github('actions/workflows/update.yml/dispatches','POST',{ref:DEMO_BRANCH,inputs:version?{data_version:String(version)}:{}});
+ await github('actions/workflows/update.yml/dispatches','POST',{ref:DEMO_BRANCH,inputs:{...(version?{data_version:String(version)}:{}),...(intakeMode==='none'?{}:{intake_mode:intakeMode,request_id:request})}});
 }
 export async function removeDemonstrationRuns(upToRun:number){
  // Fixed workflow and repository: no guest can choose a deletion target.
@@ -133,7 +140,7 @@ export async function stageOutputs(source:string){
  const id=outputStage(source);if(!id)throw Error('Unknown output.');
  const run=await json('actions/runs/'+id[1]);if(run.path!=='.github/workflows/update.yml'||run.run_attempt!==Number(id[2]))throw Error('Unknown successful workshop run.');
  const artifacts=(await json(`actions/runs/${id[1]}/artifacts?per_page=100`)).artifacts.filter((x:any)=>!x.expired);
- const a=artifacts.find((x:any)=>x.name==='workflow-'+id[2])||artifacts.find((x:any)=>x.name==='stage-'+id[2]+'-'+id[3])||artifacts.find((x:any)=>x.name==='workflow-context-'+id[2]);
+ const a=artifacts.find((x:any)=>x.name==='stage-'+id[2]+'-'+id[3])||artifacts.find((x:any)=>x.name==='workflow-'+id[2])||artifacts.find((x:any)=>x.name==='workflow-context-'+id[2]);
  if(!a||a.size_in_bytes>16*1024*1024)throw Error('Report artifact unavailable.');
  const bytes=await download(await github(`actions/artifacts/${a.id}/zip`),16*1024*1024);
  if(a.digest?.startsWith('sha256:')){const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes).buffer))).map(x=>x.toString(16).padStart(2,'0')).join('');if(a.digest!=='sha256:'+hash)throw Error('Artifact checksum mismatch.');}
@@ -170,7 +177,7 @@ export async function consoleLines(status:any){
  if(status.status!=='completed'||!status.execution?.jobs?.[0])return {ready:false,lines:[]};
  const jobs=status.execution.mode==='module_jobs'?status.execution.jobs.filter((j:any)=>j.status==='completed'&&j.conclusion!=='skipped'):[status.execution.jobs[0]];
  const logs=await Promise.all(jobs.map(async(j:any)=>new TextDecoder().decode(await download(await github(`actions/jobs/${j.id}/logs`),8*1024*1024))));const text=logs.join('\n');
- const keep=/CI PASSED:|SOURCE:|INPUTS:|OUTPUTS:|MODULE [a-z_]+:|DATA QUALITY:|DATABASE SNAPSHOT:|Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|WORKFLOW PLAN:|PRESENTATION PACE:|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:/;
+ const keep=/SUBMISSION complete:|QC |PREPARE:|LOAD complete:|CPUE SUMMARY complete:|CPUE REPORT complete:|CI PASSED:|SOURCE:|INPUTS:|OUTPUTS:|MODULE [a-z_]+:|DATA QUALITY:|DATABASE SNAPSHOT:|Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|WORKFLOW PLAN:|PRESENTATION PACE:|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:/;
  return {ready:true,run_id:status.run_id,attempt:status.attempt,source:'GitHub Actions console log',lines:text.split('\n').filter(x=>keep.test(x)).sort().slice(-70)};
 }
 export async function change(stage:string){
@@ -178,7 +185,7 @@ export async function change(stage:string){
  await ensureBranch();
  const record=await json('contents/config/stages.json?ref='+DEMO_BRANCH),config=JSON.parse(atob(record.content.replaceAll('\n','')));
  let setting,description;
- if(stage.startsWith('cpue_')){const value=config[stage]?.min_hooks===2000?0:2000;setting={min_hooks:value};description=`${stage}: minimum hooks = ${value}`;}
+ if(['cpue_vessel','cpue_year'].includes(stage)){const value=config[stage]?.min_hooks===2000?0:2000;setting={min_hooks:value};description=`${stage}: minimum hooks = ${value}`;}
  else if(stage.startsWith('assessment_')){const base=stage.endsWith('high_m')?.30:.20;const value=config[stage]?.M===undefined||config[stage].M===base?Math.round((base+.05)*100)/100:base;setting={M:value};description=`${stage}: natural mortality M = ${value.toFixed(2)}`;}
  else{const value=config[stage]?.revision===1?0:1;setting={revision:value};description=`${stage}: rerun revision ${value}`;}
  config[stage]=setting;
@@ -243,8 +250,8 @@ export async function changeBranch(stage:string,branch:string,request:string){
 }
 
 export async function stageLog(status:any,key:string){
- if(!changeable.has(key as any))throw Error('Unknown stage.');
- const stage=status.stages.find((s:any)=>s.key===key),job=status.execution?.jobs?.find((j:any)=>j.id===stage?._job_id)||status.execution?.jobs?.[0];
+ if(!outputKeys.has(key as any))throw Error('Unknown stage.');
+ const stage=[...status.stages,...(status.intake_stages||[])].find((s:any)=>s.key===key),job=status.execution?.jobs?.find((j:any)=>j.id===stage?._job_id)||status.execution?.jobs?.[0];
  const base={run_id:status.run_id,stage:key,source:'GitHub steps'};
  if(stage?.reused)return {...base,lines:['Verified outputs restored; no runner needed.']};
  if(!job)return {...base,lines:['Waiting for a GitHub runner.']};
@@ -252,7 +259,7 @@ export async function stageLog(status:any,key:string){
  if(job.status==='completed'&&job.conclusion!=='skipped'){
   try{
    const log=new TextDecoder().decode(await download(await github(`actions/jobs/${job.id}/logs`),8*1024*1024));
-   const keep=/SOURCE:|DATA: release|INPUTS:|OUTPUTS:|Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:|REPRODUCIBILITY:|ERROR|Error:|ValueError:/;
+   const keep=/SUBMISSION complete:|QC |PREPARE:|LOAD complete:|CPUE SUMMARY complete:|CPUE REPORT complete:|SOURCE:|DATA: release|INPUTS:|OUTPUTS:|Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:|REPRODUCIBILITY:|ERROR|Error:|ValueError:/;
    let lines=log.split('\n').filter(x=>keep.test(x)&&!x.includes('##[group]')).map(x=>x.replace(/^(\S+)\s*/,(_,t)=>stamp(t)+'  ').slice(0,240));
    if(status.execution.mode==='steps'){
     const tags:Record<string,string>={extract:'EXTRACT complete:',cpue_vessel:'vessel_adjusted',cpue_year:'year_only',prepare_vessel:'INPUT PREPARATION complete:',prepare_year:'INPUT PREPARATION complete:',synthesis:'SYNTHESIS complete:',report:'REPORT complete:'};

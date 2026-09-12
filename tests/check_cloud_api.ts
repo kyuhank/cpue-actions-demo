@@ -29,9 +29,9 @@ Deno.test('Real skipped steps are reuse only after successful verified restore; 
  {name:'01 Extract · reused',status:'completed',conclusion:'skipped'},
  {name:'02 CPUE: year + vessel',status:'in_progress'},...definitions.slice(2).map(x=>({name:x[1],status:'pending'}))];
  const d=mapRun(run,[{id:8,steps}]);
- equal(d.stages.length,11);equal(d.stages[0].reused,true);equal(d.stages[0].status,'completed');
+ equal(d.stages.length,13);equal(d.stages[0].reused,true);equal(d.stages[0].status,'completed');
  equal(d.stages[1].status,'running');equal(d.stages[3].status,'waiting');equal(d.database_version,2025);
- equal(d.stages[3].parents,['extract','cpue_vessel']);equal(d.stages[9].parents.length,4);
+ equal(d.stages.find(s=>s.key==='prepare_vessel')?.parents,['extract','cpue_vessel']);equal(d.stages.find(s=>s.key==='synthesis')?.parents.length,4);
  steps[3].status='in_progress';equal(mapRun(run,[{id:8,steps}]).stages.filter(s=>s.status==='running').length,2);
  steps[0].conclusion='failure';equal(mapRun(run,[{id:8,steps}]).stages[0].reused,false);
 });

@@ -75,7 +75,7 @@
     "main": {
       "repository": "kyuhank/cpue-demo-report",
       "branch": "main",
-      "commit": "2131766db3108534c3ce9642b645ea16c2a71bb6"
+      "commit": "fd28d2f68ff75dd39ca70554f431ca49bb068736"
     },
     "develop": {
       "repository": "kyuhank/cpue-demo-report",
@@ -129,6 +129,20 @@
       "repository": "kyuhank/cpue-demo-assessment",
       "branch": "structure-2-dev",
       "commit": "c0d0c4c9af6a5ae11b603b639b1dd19599db58c2"
+    }
+  },
+  "cpue_summary": {
+    "main": {
+      "repository": "kyuhank/cpue-demo-cpue",
+      "branch": "main",
+      "commit": "224bd2de948fac7d1213f2e8b918c22b214620c0"
+    }
+  },
+  "cpue_report": {
+    "main": {
+      "repository": "kyuhank/cpue-demo-cpue",
+      "branch": "main",
+      "commit": "224bd2de948fac7d1213f2e8b918c22b214620c0"
     }
   }
 }

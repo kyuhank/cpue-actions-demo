@@ -40,7 +40,7 @@ with tempfile.TemporaryDirectory(prefix='cpue-modules-') as folder:
     (root/'module-versions.json').write_text(json.dumps(sources))
     subprocess.run([sys.executable,'scripts/workflow_plan.py',str(previous)],cwd=root,env=env,check=True,stdout=subprocess.DEVNULL)
     plan=json.loads((root/'stages/_plan.json').read_text())
-    assert {key for key,r in plan['stages'].items() if r['action']=='run'}=={'cpue_vessel','prepare_vessel','assessment_vessel_ref','assessment_vessel_high_m','synthesis','report'}
+    assert {key for key,r in plan['stages'].items() if r['action']=='run'}=={'cpue_summary','cpue_report','cpue_vessel','prepare_vessel','assessment_vessel_ref','assessment_vessel_high_m','synthesis','report'}
     with (root/'pipeline/cpue_vessel.py').open('a') as f:f.write('\n# unrecorded edit\n')
     result=subprocess.run([sys.executable,'scripts/workflow_plan.py'],cwd=root,env=env,capture_output=True,text=True)
     assert result.returncode!=0 and 'does not match its locked commit' in result.stderr

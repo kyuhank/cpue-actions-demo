@@ -13,7 +13,8 @@ assert len(commit)==40 and all(c in '0123456789abcdef' for c in commit)
 kind=repo.removeprefix('kyuhank/cpue-demo-')
 spec=json.loads((CANDIDATE/'model.json').read_text()) if (CANDIDATE/'model.json').exists() else {}
 keys=[k for k in FILES if REPOS[k.split('_')[0]]==kind]
-if kind=='cpue' and spec.get('choice'):keys=[k for k in keys if k==('cpue_vessel' if spec['choice']=='vessel_adjusted' else 'cpue_year')]
+if kind=='cpue' and spec.get('choice'):keys=[k for k in keys if k in ('cpue_summary','cpue_report') or k==('cpue_vessel' if spec['choice']=='vessel_adjusted' else 'cpue_year')]
+keys=[k for k in keys if all((CANDIDATE/name).exists() for name in FILES[k])]
 contracts={'extract':{'sets.csv':{'set_id','year','hooks','catch_n'},'catch.csv':{'year','catch_t'}},'cpue':{'cpue.csv':{'year','index'}},'inputs':{'assessment-input.csv':{'year'}},'assessment':{'biomass.csv':{'year'},'summary.csv':set()},'synthesis':{'cpue.csv':{'year'},'biomass.csv':{'year'},'summary.csv':set()},'report':{'cpue.csv':{'year'},'biomass.csv':{'year'},'summary.csv':set()}}
 def digest(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 results={}

@@ -24,9 +24,9 @@ Deno.test('Stage updates write only the disposable branch and fixed config; no m
  };
  try{
   for(const [stage] of definitions)await change(stage);
-  assert(calls.filter(x=>x.method==='PUT').length===11);
+  assert(calls.filter(x=>x.method==='PUT').length===13);
   let rejected=false;try{await change('../private');}catch{rejected=true;}assert(rejected);
-  assert(emptyRun().has_run===false&&emptyRun().stages.length===11);
+  assert(emptyRun().has_run===false&&emptyRun().stages.length===13);
  }finally{globalThis.fetch=original;Deno.env.delete('WORKSHOP_GITHUB_TOKEN');}
 });
 

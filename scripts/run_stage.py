@@ -28,7 +28,7 @@ if plan:
         if record['fingerprint'] != plan['stages'][parent]['fingerprint'] or record['outputs'] != hashes(folder / 'outputs'):
             raise SystemExit('A parent output does not match the verified workflow plan')
 work.mkdir(parents=True, exist_ok=False)
-if key == 'synthesis':
+if key in ('synthesis','cpue_summary'):
     for parent in parents[key]:
         shutil.copytree(ROOT / 'stages' / parent / 'outputs', work / 'inputs' / parent)
 elif parents[key]:
@@ -46,7 +46,14 @@ if key.startswith('cpue_') and code_source.get('specification', {}).get('choice'
 started = time.perf_counter()
 started_at = datetime.now(timezone.utc).isoformat()
 runpy.run_path(str(ROOT / 'pipeline' / code_source.get('entrypoint', stage + '.py')), run_name='__main__')
-if key != 'report':
+if key in ('cpue_summary','cpue_report'):
+    target=work/'outputs/manifest.json'
+    manifest=json.loads(target.read_text())
+    manifest['cpue_reporting']={**manifest.get('cpue_reporting',{}),key:{'code_source':code_source,'run_id':os.getenv('GITHUB_RUN_ID','local'),'container':os.getenv('TOY_CONTAINER_IMAGE','local')}}
+    target.write_text(json.dumps(manifest,indent=2)+'\n')
+    if key=='cpue_report':
+        runpy.run_path(str(ROOT/'pipeline'/code_source['entrypoint']),run_name='__main__')
+if key not in ('report','cpue_report'):
     runpy.run_path(str(ROOT / 'pipeline/stage_html.py'))['build'](key, work / 'outputs', code_source)
 compute_seconds = time.perf_counter() - started
 record = {'stage': key, 'fingerprint': plan['stages'][key]['fingerprint'] if plan else fingerprints()[key],

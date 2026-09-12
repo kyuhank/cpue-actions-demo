@@ -26,7 +26,7 @@ begin
  if exists(select 1 from workshop_private.cloud_demo where phase='cleaning') then
    raise exception 'The demonstration is being reset';
  end if;
- if p_kind not in ('data','invalid','extract','prepare_vessel','prepare_year','synthesis','report','cpue_vessel','cpue_year','assessment_vessel_ref',
+ if p_kind not in ('data','invalid','extract','prepare_vessel','prepare_year','synthesis','report','cpue_vessel','cpue_year','cpue_summary','cpue_report','assessment_vessel_ref',
    'assessment_vessel_high_m','assessment_year_ref','assessment_year_high_m') then raise exception 'Unknown action'; end if;
  select * into previous from workshop_private.cloud_requests where id=p_id;
  if found then return jsonb_build_object('duplicate',true,'result',previous.result); end if;

@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def stage_settings():
     path = ROOT / os.getenv('TOY_STAGE_CONFIG', 'config/stages.json')
     values = json.loads(path.read_text()) if path.exists() else {}
-    rerunnable = {'extract', 'prepare_vessel', 'prepare_year', 'synthesis', 'report'}
+    rerunnable = {'extract', 'prepare_vessel', 'prepare_year', 'synthesis', 'report', 'cpue_summary', 'cpue_report'}
     allowed = {'cpue_vessel', 'cpue_year', *[c['key'] for c in assessment_cases(False)], *rerunnable}
     if not isinstance(values, dict) or set(values) - allowed:
         raise ValueError('Unknown workshop setting')

@@ -48,3 +48,6 @@ execution-context.json
 workflow-context.tar.gz
 context.tar.gz
 transfers/
+
+pipeline/cpue_summary.py
+pipeline/cpue_report.py

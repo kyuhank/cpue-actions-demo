@@ -28,14 +28,18 @@ def plot(path, field, title):
 
 def build(key, out, source):
     family = 'inputs' if key.startswith('prepare_') else key.split('_')[0]
-    title = {'extract':'Data extraction','cpue':'CPUE analysis','inputs':'Assessment inputs','assessment':'Stock assessment results','synthesis':'Results synthesis'}[family]
+    title = {'extract':'Data extraction','cpue':'CPUE analysis','inputs':'Assessment inputs','assessment':'Stock assessment results','synthesis':'Results summary'}[family]
     if family in ('cpue','inputs'): title += ' · ' + ('A' if key.endswith('vessel') else 'B')
     if family == 'assessment': title += ' · ' + ('A' if '_vessel_' in key else 'B') + (' / 2' if key.endswith('high_m') else ' / 1')
+    if key=='cpue_summary': title='CPUE results summary'
     manifest = json.loads((out/'manifest.json').read_text())
     files, sections = [], []
     if family == 'extract':
         sections += ['<h2>Annual catch</h2>'+plot(out/'catch.csv','catch_t','Catch (t)'), '<h2>Extracted records</h2>'+table(out/'sets.csv',8)]
         files = ['sets.csv','catch.csv','extract.sql','extract-catch.sql']
+    elif key=='cpue_summary':
+        sections += [(out/'cpue.svg').read_text(),'<h2>Comparison</h2>'+table(out/'comparison.csv')]
+        files=['cpue.csv','comparison.csv','cpue.svg']
     elif family == 'cpue':
         sections += [plot(out/'cpue.csv','index','Relative CPUE'), '<h2>Standardised index</h2>'+table(out/'cpue.csv')]
         if (out/'cpue-diagnostics.txt').exists(): sections += ['<h2>Diagnostics</h2><pre>'+html.escape((out/'cpue-diagnostics.txt').read_text())+'</pre>']

@@ -391,7 +391,7 @@ function narrate(){
  else if(data.status!=='completed')text=['Prepare the next group of jobs.','Pass the completed outputs to the jobs that need them.'];
  else if(data.conclusion==='success'){
   const ran=data.stages.filter(s=>!s.reused).length+(data.intake_stages||[]).filter(s=>!s.skipped).length,reused=data.stages.filter(s=>s.reused).length;
-  text=['Results are ready.',ran+' jobs completed'+(reused?' · '+reused+' reused unchanged':'')+'. Open a job to inspect its outputs.'];
+  text=['Results are ready.',ran+(ran===1?' job completed':' jobs completed')+(reused?' · '+reused+' reused unchanged':'')+'. Inspect outputs in the Orchestration tool.'];
  }else{
   const failed=[...(data.intake_stages||[]),...data.stages].find(s=>s.status==='failed');text=[(failed?names[failed.key]:'The workflow')+' stopped.','Open the failed job to see what needs to be corrected.'];record.dataset.phase='failed';
  }

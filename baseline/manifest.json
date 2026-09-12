@@ -1,8 +1,8 @@
 {
   "description": "Fixed synthetic results; retained when visitor runs expire.",
   "version": 2023,
-  "code_commit": "10a97371744ba09aace319c1e29a6b3d2b5977bd",
+  "code_commit": "a199dd884f60b8a11690341e18b39136c8623008",
   "container": "ghcr.io/pacificcommunity/cpue-workshop@sha256:17b03d6e06da229b17524997d8a3fc8eb5f8f25233894b5ab99f89109b3890c5",
   "snapshot_sha256": "0379a5b4dfe56603f4099d981109e4bead2daff1a4e4daf3c214358baf85cedf",
-  "sha256": "ddad74c6097efdff4c37864485204db552260fa1db2094c26fab5555836a3617"
+  "sha256": "20d9d7a7934c5973ed6b56faf124f1e97089c3e2060f80334a19f84ef1c984f1"
 }

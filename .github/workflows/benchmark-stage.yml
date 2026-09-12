@@ -1,0 +1,40 @@
+name: Execute a module on its own runner
+on:
+  workflow_call:
+    inputs:
+      stage:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  execute:
+    name: ${{ inputs.stage }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      TOY_CONTAINER_IMAGE: ghcr.io/pacificcommunity/cpue-workshop@sha256:17b03d6e06da229b17524997d8a3fc8eb5f8f25233894b5ab99f89109b3890c5
+      TOY_CODE_COMMIT: ${{ github.sha }}
+      TOY_DATA_COMMIT: ${{ github.sha }}
+      TOY_DEMO_PACE_SECONDS: 4
+      BENCHMARK_STAGE: ${{ inputs.stage }}
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: context
+      - name: Restore the fixed workload
+        run: python3 -c 'import tarfile; tarfile.open("context.tar.gz").extractall(filter="data")'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: inputs.stage != 'all' && inputs.stage != 'extract'
+        with:
+          pattern: stage-*
+          path: transfers
+          merge-multiple: true
+      - name: Pull container and execute
+        run: python3 scripts/benchmark_stage.py "$BENCHMARK_STAGE"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.stage == 'all' && 'benchmark-fast' || format('stage-{0}', inputs.stage) }}
+          path: ${{ inputs.stage == 'all' && 'benchmark-fast.tar.gz' || format('stage-{0}.tar.gz', inputs.stage) }}
+          retention-days: 1
+          if-no-files-found: error

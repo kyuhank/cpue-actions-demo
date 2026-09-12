@@ -16,5 +16,9 @@ def run_group(number):
         with ThreadPoolExecutor(max_workers=5) as pool:list(pool.map(execute,keys))
         # The real job holds completed files briefly so each group is visible live.
         time.sleep(max(0,min(3,float(os.getenv('WORKSHOP_GROUP_SECONDS','2')))-(time.monotonic()-started)))
+        pause=max(0,min(5,float(os.getenv('WORKSHOP_TRANSITION_SECONDS','0'))))
+        if pause:
+            print(f'PRESENTATION PACE: pause {pause:g} s before the next stage group',flush=True)
+            time.sleep(pause)
     print('GROUP complete:',', '.join(keys) if keys else 'verified outputs reused',flush=True)
 if __name__=='__main__':run_group(int(sys.argv[1]))

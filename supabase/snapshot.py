@@ -75,3 +75,7 @@ if __name__ == '__main__':
         print('DATA QUALITY: accepted incoming batch; rules sha256 ' + snapshot['quality_check']['rules_sha256'])
 
     time.sleep(max(0, min(3, float(os.getenv("WORKSHOP_DATABASE_SECONDS", "0"))) - (time.monotonic()-started)))
+    pause=max(0,min(5,float(os.getenv('WORKSHOP_TRANSITION_SECONDS','0'))))
+    if pause:
+        print(f'PRESENTATION PACE: pause {pause:g} s after database verification',flush=True)
+        time.sleep(pause)

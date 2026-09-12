@@ -35,10 +35,11 @@ export async function github(path:string, method='GET', body?:unknown, allowMiss
 export async function json(path:string){return (await github(path)).json();}
 export function mapRun(run:any,jobs:any[]){
  const physical=jobs[0], steps=physical?.steps||[], states:Record<string,string>={};
+ const restored=steps.some((s:any)=>s.name==='Restore and verify reusable outputs'&&s.conclusion==='success');
  const stages=definitions.map(([key,label,parents])=>{
   const step=steps.find((s:any)=>s.name.replace(/ · reused$/,'').replace(/ \(0\.\d+\)/,'')===label);
-  const reused=!!step&&step.name.endsWith(' · reused')&&step.conclusion==='skipped'&&steps.some((s:any)=>s.name==='Restore and verify reusable outputs'&&s.conclusion==='success');
-  let state=reused?'completed':step?.status==='in_progress'?'running':step?.status==='completed'?({success:'completed',failure:'failed',cancelled:'cancelled',skipped:'blocked',timed_out:'failed'} as any)[step.conclusion]||'blocked':run.status==='completed'?'blocked':parents.every(p=>states[p]==='completed')?'idle':'waiting';
+  const reused=!!step&&step.name.endsWith(' · reused')&&step.conclusion==='skipped'&&restored;
+  let state=reused?'completed':step?.status==='in_progress'?'running':step?.status==='completed'?({success:'completed',failure:'failed',cancelled:'cancelled',skipped:'blocked',timed_out:'failed'} as any)[step.conclusion]||'blocked':run.status==='completed'?'blocked':restored&&parents.every(p=>states[p]==='completed')?'idle':'waiting';
   states[key]=state;
   return {key,label:label.slice(3),parents,status:state,reused,source_id:`${run.id}-${run.run_attempt}-${key}`,started_at:step?.started_at,completed_at:step?.completed_at,html_url:physical?.html_url,_step_number:step?.number};
  });

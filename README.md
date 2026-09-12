@@ -4,10 +4,13 @@ An executable example connecting synthetic fishery data to CPUE indices, assessm
 
 [Open the demo](https://kyuhank.github.io/cpue-actions-demo/)
 
-```text
-Data → QC → Extract → CPUE A / B → Input preparation
-                    └──────────────┘
-                  → Four assessments → Synthesis → Report
+```mermaid
+flowchart LR
+    D[Data + QC] --> E[Extraction]
+    E --> C[CPUE analyses]
+    E --> I[Input preparation]
+    C --> I --> A[Assessment models]
+    A --> S[Results synthesis] --> R[Report]
 ```
 
 Select a stage to rerun it and its dependants. Verified, unchanged outputs are reused. Independent analyses run in parallel within one GitHub runner and a pinned container. The orchestration view exposes each stage’s outputs and execution records.

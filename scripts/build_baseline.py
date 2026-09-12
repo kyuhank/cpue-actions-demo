@@ -1,7 +1,6 @@
 """Calculate the fixed synthetic starting point in the pinned runtime container."""
 import argparse
 import hashlib
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -19,8 +18,6 @@ snapshot = json.loads(args.snapshot.read_text())
 assert snapshot['version'] == 2023
 subprocess.run(['git','diff','--exit-code','HEAD','--','pipeline','scripts'], cwd=ROOT, check=True, stdout=subprocess.DEVNULL)
 commit = subprocess.check_output(['git','rev-parse','HEAD'], cwd=ROOT, text=True).strip()
-spec = importlib.util.spec_from_file_location('snapshot', ROOT / 'supabase/snapshot.py')
-module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 with tempfile.TemporaryDirectory(prefix='cpue-baseline-') as folder:
     work = Path(folder)
     for name in ('pipeline','scripts'):

@@ -56,6 +56,15 @@ def materialise(snapshot, target):
     return hashlib.sha256(target.read_bytes()).hexdigest()
 
 
+def show_database_transition(selection):
+    request=os.getenv('WORKSHOP_REQUEST_ID','')
+    if not request:
+        return True
+    modules=selection.with_name('modules.json')
+    configured=json.loads(modules.read_text()) if modules.exists() else {}
+    return configured.get('extract',{}).get('request')==request
+
+
 if __name__ == '__main__':
     import time
     started=time.monotonic()
@@ -74,8 +83,10 @@ if __name__ == '__main__':
     if snapshot.get('quality_check'):
         print('DATA QUALITY: accepted incoming batch; rules sha256 ' + snapshot['quality_check']['rules_sha256'])
 
-    time.sleep(max(0, min(3, float(os.getenv("WORKSHOP_DATABASE_SECONDS", "0"))) - (time.monotonic()-started)))
-    pause=max(0,min(5,float(os.getenv('WORKSHOP_TRANSITION_SECONDS','0'))))
-    if pause:
-        print(f'PRESENTATION PACE: pause {pause:g} s after database verification',flush=True)
-        time.sleep(pause)
+    # Retained upstream data are still verified, without a presentation pause.
+    if show_database_transition(selection):
+        time.sleep(max(0, min(3, float(os.getenv("WORKSHOP_DATABASE_SECONDS", "0"))) - (time.monotonic()-started)))
+        pause=max(0,min(5,float(os.getenv('WORKSHOP_TRANSITION_SECONDS','0'))))
+        if pause:
+            print(f'PRESENTATION PACE: pause {pause:g} s after database verification',flush=True)
+            time.sleep(pause)

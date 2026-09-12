@@ -16,5 +16,5 @@ def check(pair):
  print(f'CI PASSED: {repo}@{commit[:8]} · two-run reproducibility and output contract')
  return {'repository':repo,'commit':commit,'check_id':run['id'],'url':run['html_url'],'conclusion':'success','completed_at':run['completed_at']}
 pairs=sorted({(s['repository'],s['commit']) for s in selected_sources().values()})
-with ThreadPoolExecutor(max_workers=4) as pool:checks=list(pool.map(check,pairs))
+with ThreadPoolExecutor(max_workers=8) as pool:checks=list(pool.map(check,pairs))
 (ROOT/'module-checks.json').write_text(json.dumps(checks,indent=2)+'\n')

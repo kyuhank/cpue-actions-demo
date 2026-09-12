@@ -212,7 +212,7 @@ export async function consoleLines(status:any){
  if(status.status!=='completed'||!status.execution?.jobs?.[0])return {ready:false,lines:[]};
  const jobs=status.execution.mode==='module_jobs'?status.execution.jobs.filter((j:any)=>j.status==='completed'&&j.conclusion!=='skipped'):[status.execution.jobs[0]];
  const logs=await Promise.all(jobs.map(async(j:any)=>new TextDecoder().decode(await download(await github(`actions/jobs/${j.id}/logs`),8*1024*1024))));const text=logs.join('\n');
- const keep=/SUBMISSION complete:|QC |PREPARE:|LOAD complete:|CPUE SUMMARY complete:|CPUE REPORT complete:|CI PASSED:|SOURCE:|INPUTS:|OUTPUTS:|MODULE [a-z_]+:|DATA QUALITY:|DATABASE SNAPSHOT:|Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|WORKFLOW PLAN:|PRESENTATION PACE:|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:/;
+ const keep=/SUBMISSION complete:|QC |RETURN:|RESUBMIT:|PREPARE:|LOAD complete:|CPUE SUMMARY complete:|CPUE REPORT complete:|CI PASSED:|SOURCE:|INPUTS:|OUTPUTS:|MODULE [a-z_]+:|DATA QUALITY:|DATABASE SNAPSHOT:|Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|WORKFLOW PLAN:|PRESENTATION PACE:|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:/;
  return {ready:true,run_id:status.run_id,attempt:status.attempt,source:'GitHub Actions console log',lines:text.split('\n').filter(x=>keep.test(x)).sort().slice(-70)};
 }
 export async function change(stage:string){
@@ -293,17 +293,18 @@ export async function stageLog(status:any,key:string){
  if(job.status==='completed'&&job.conclusion!=='skipped'){
   try{
    const log=new TextDecoder().decode(await download(await github(`actions/jobs/${job.id}/logs`),8*1024*1024));
-   const keep=/SUBMISSION complete:|QC |PREPARE:|LOAD complete:|CPUE SUMMARY complete:|CPUE REPORT complete:|SOURCE:|DATA: release|INPUTS:|OUTPUTS:|Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:|REPRODUCIBILITY:|ERROR|Error:|ValueError:/;
+   const keep=/SUBMISSION complete:|QC |RETURN:|RESUBMIT:|PREPARE:|LOAD complete:|CPUE SUMMARY complete:|CPUE REPORT complete:|SOURCE:|DATA: release|INPUTS:|OUTPUTS:|Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:|REPRODUCIBILITY:|ERROR|Error:|ValueError:/;
    let lines=log.split('\n').filter(x=>keep.test(x)&&!x.includes('##[group]')).map(x=>x.replace(/^(\S+)\s*/,(_,t)=>stamp(t)+'  ').slice(0,240));
    if(['steps','grouped_steps'].includes(status.execution.mode)){
-    const tags:Record<string,string>={extract:'EXTRACT complete:',cpue_vessel:'vessel_adjusted',cpue_year:'year_only',prepare_vessel:'INPUT PREPARATION complete:',prepare_year:'INPUT PREPARATION complete:',synthesis:'SYNTHESIS complete:',report:'REPORT complete:'};
+    const tags:Record<string,string>={submission:'SUBMISSION complete:',qc:'QC ',ingest:'LOAD complete:',cpue_summary:'CPUE SUMMARY complete:',cpue_report:'CPUE REPORT complete:',extract:'EXTRACT complete:',cpue_vessel:'vessel_adjusted',cpue_year:'year_only',prepare_vessel:'INPUT PREPARATION complete:',prepare_year:'INPUT PREPARATION complete:',synthesis:'SYNTHESIS complete:',report:'REPORT complete:'};
     lines=lines.filter(x=>x.includes(tags[key]||key));
    }
    if(lines.length)return {...base,source:'GitHub log',lines:lines.slice(-4)};
   }catch{/* Preserve the actual step record if the downloadable log is delayed. */}
  }
  let steps=(job.steps||[]).filter((s:any)=>s.started_at&&s.name!=='Complete job'&&!s.name.startsWith('Post '));
- if(['steps','grouped_steps'].includes(status.execution.mode)&&key!=='extract')steps=steps.filter((s:any)=>s.number===stage._step_number);
+ if(status.execution.mode==='grouped_steps'&&key==='qc')steps=steps.filter((s:any)=>['QC submitted records','Return failed submission','Correct and resubmit example','Recheck corrected submission'].includes(s.name));
+ else if(['steps','grouped_steps'].includes(status.execution.mode)&&key!=='extract')steps=steps.filter((s:any)=>s.number===stage._step_number);
  const lines=steps.slice(-3).map((s:any)=>stamp(s.started_at)+'  '+(s.status==='in_progress'?'▶ ':s.conclusion==='success'?'✓ ':'× ')+s.name.replace('Prepare the pinned Docker environment','Start container'));
  return {...base,lines:lines.length?lines:['Waiting for dependency outputs.']};
 }

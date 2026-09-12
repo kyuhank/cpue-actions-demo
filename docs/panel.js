@@ -163,9 +163,20 @@ function drawQuality(){
  const correction=data.intake_stages?.find(j=>j.key==='qc')?.correction_phase;gate.dataset.correction=correction||'';if(correction==='corrected')gate.title='Initial QC failed → example corrected and resubmitted → recheck passed';
  gate.setAttribute('aria-label','Quality check: '+{completed:'passed',failed:'failed',running:'checking',waiting:'ready'}[state]+'. View checks.');
 }
+let qualityLoading=false;const qualityDetails=new Map();
+async function loadQualityRecord(){
+ const stage=data?.intake_stages?.find(s=>s.key==='qc');if(!stage||data.status!=='completed'||qualityLoading||qualityDetails.has(stage.source_id))return;
+ qualityLoading=true;
+ try{
+  const read=async file=>{const r=await fetch('/api/output?job='+stage.source_id+'&file='+file);return r.ok?r.json():null;};
+  const [quality,first,correction]=await Promise.all(['quality.json','first-quality.json','correction.json'].map(read));
+  if(quality){const detail={quality_check:quality,first_quality_check:first,correction,published:data.intake_stages.some(s=>s.key==='ingest'&&s.status==='completed'),checked_at:Date.parse(data.created_at)/1000};qualityDetails.set(stage.source_id,detail);if(data.intake_stages.some(s=>s.source_id===stage.source_id))data.data_intake=detail;}
+ }catch{}finally{qualityLoading=false;if(qualityRecordOpen&&qualityDetails.has(stage.source_id))showQualityRecord();}
+}
 function showQualityRecord(){
  $('console-title').textContent='Data quality check · before extraction';
- $('console-lines').textContent=qualityRecord().join('\n')||'Incoming data are checked before a release is published. Select Data to add a checked batch or test a rejected batch.';
+ const stage=data?.intake_stages?.find(s=>s.key==='qc');if(stage&&qualityDetails.has(stage.source_id))data.data_intake=qualityDetails.get(stage.source_id);
+ $('console-lines').textContent=qualityRecord().join('\n')||(data.status==='completed'?'Loading the recorded quality checks…':$('message').textContent);loadQualityRecord();
  $('console-link').removeAttribute('href');$('console-link').textContent='';
 }
 function links(){

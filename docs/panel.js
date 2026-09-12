@@ -277,7 +277,7 @@ function narrate(){
  else if(running.length){const key=running[0].key;message=labels[key]||(key.startsWith('assessment_')?'Fitting '+names[key].toLowerCase()+' using CPUE '+(key.includes('vessel')?'A':'B')+'.':'Running the selected analysis.');}
  else if(data.has_run===false)message='Select a starting stage. Run it and its dependent jobs.';
  else if(data.status!=='completed')message=phase==='corrected'?'QC failed → resubmitted → passed. Preparing the analyses with the accepted data.':data.stages.some(s=>s.status==='completed'&&!s.reused)?'Results saved. Preparing the next dependent jobs.':'Preparing code, software and the selected data version.';
- else if(data.conclusion==='success'){const ran=data.stages.filter(s=>!s.reused).length;message=ran+' jobs completed. Open a job to inspect its outputs.';}
+ else if(data.conclusion==='success'){const ran=data.stages.filter(s=>!s.reused).length+(data.intake_stages||[]).filter(s=>!s.skipped).length;message=phase==='corrected'?'QC failed → corrected → passed. '+ran+' jobs completed. Open a job to inspect its outputs.':ran+' jobs completed. Open a job to inspect its outputs.';}
  else{message='The workflow stopped. Open the failed job to inspect the reason.';record.dataset.phase='failed';}
  if(message)$('message').textContent=message;
  if(data.demo?.reset_at&&data.status==='completed'){const sec=Math.max(0,Math.ceil((Date.parse(data.demo.reset_at)-Date.now())/1000));$('verified').textContent='Resets in '+Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');}

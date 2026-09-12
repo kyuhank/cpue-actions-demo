@@ -13,6 +13,8 @@ demo-capture/
 private/
 
 stages/
+.baseline-workflow/
+.previous-workflow/
 
 supabase/.temp/
 supabase/.env*

@@ -1,13 +1,15 @@
-# Hosted synthetic demonstration
+# Hosted data service
 
-The Supabase Free project holds the synthetic baseline through 2023. `schema.sql`, `seed.sql` and `quality-check.sql` install the data and publication checks. `snapshot.py` downloads a specified release into a deterministic SQLite snapshot.
+The service stores versioned synthetic data and connects accepted releases to the demonstration workflow.
 
-A new year passes QC before publication. The database release webhook dispatches the fixed GitHub workflow directly; no presentation host is involved. GitHub reads that snapshot and executes extraction through reporting. The server credential stays in Supabase Edge Function secrets.
+- `schema.sql`, `seed.sql`, `quality-check.sql`: baseline data and publication checks.
+- `snapshot.py`: materialise a selected release as a SQLite snapshot.
+- `cloud-control.sql`: atomic request limits and dispatch deduplication.
+- `demo-lifecycle.sql`, `demo-cron.sql`: expire visitor runs and restore the baseline.
+- `functions/`: fixed workflow controls, status and output access.
 
-`cloud-control.sql` enforces 60 shared requests per UTC day, one active request and a 30-second interval. `demo-lifecycle.sql` restores the baseline after the latest completed run's ten-minute viewing period. `demo-cron.sql` checks cleanup each minute independently of the browser, deleting the demonstration's GitHub runs, artifacts and temporary branch. Today's request counters survive resets. Normal publication remains immutable; reset is an explicit exception for this disposable synthetic example.
+Incoming data pass QC before publication. A release webhook triggers extraction and downstream analyses. Published data remain immutable during a demonstration.
 
-Use a fine-grained token restricted to **kyuhank/cpue-toy-data**, with Contents and Actions read/write only. Store it as `WORKSHOP_GITHUB_TOKEN`, with the owner's confirmed zero-dollar Actions stop recorded as `WORKSHOP_ZERO_BUDGET_CONFIRMED=true`. Never put credentials in public files or slides. Guests can invoke only fixed stage updates and synthetic batches; the cleanup endpoint requires a separate server secret.
+Controls accept predefined synthetic updates only. Credentials remain server-side. Limits are 60 requests per UTC day, one active run and a 30-second interval. Cleanup starts ten minutes after completion, checked once per minute; request limits survive reset. The versioned baseline archive is retained for intermediate starts.
 
-The first run calculates initial inputs. Later updates reuse verified outputs from the same temporary branch. Production analyses would retain accepted snapshots, code, environments and results in an approved archive.
-
-[Scheduled functions](https://supabase.com/docs/guides/functions/schedule-functions) · [Server secrets](https://supabase.com/docs/guides/functions/secrets)
+[Scheduled functions](https://supabase.com/docs/guides/functions/schedule-functions)

@@ -46,7 +46,7 @@ jobs:
       TOY_DATA_COMMIT: ${{ inputs.data_ref || github.sha }}
       TOY_DATA_REPOSITORY: ${{ inputs.data_repository || github.repository }}
       TOY_SOURCE_DATABASE: ${{ inputs.data_repository && 'source-data/data/toy-fishery.sqlite' || 'data/toy-fishery.sqlite' }}
-      TOY_EXECUTION_MODE: single_runner_steps
+      TOY_EXECUTION_MODE: parallel_steps
       TOY_GITHUB_JOB: workshop
       TOY_STAGE_CONFIG: ${{ inputs.data_repository && 'source-data/config/stages.json' || 'config/stages.json' }}
       TOY_DEMO_PACE_SECONDS: 4
@@ -93,27 +93,41 @@ jobs:
       - name: "02 CPUE: year + vessel${{ steps.plan.outputs.cpue_vessel == 'reuse' && ' · reused' || '' }}"
         if: steps.plan.outputs.cpue_vessel == 'run'
         run: docker exec cpue-workshop python scripts/run_stage.py cpue_vessel
+        background: true
       - name: "02 CPUE: year only${{ steps.plan.outputs.cpue_year == 'reuse' && ' · reused' || '' }}"
         if: steps.plan.outputs.cpue_year == 'run'
         run: docker exec cpue-workshop python scripts/run_stage.py cpue_year
+        background: true
+      - name: Wait for CPUE analyses
+        wait-all:
       - name: "03 Prepare inputs: vessel${{ steps.plan.outputs.prepare_vessel == 'reuse' && ' · reused' || '' }}"
         if: steps.plan.outputs.prepare_vessel == 'run'
         run: docker exec cpue-workshop python scripts/run_stage.py prepare_vessel
+        background: true
       - name: "03 Prepare inputs: year${{ steps.plan.outputs.prepare_year == 'reuse' && ' · reused' || '' }}"
         if: steps.plan.outputs.prepare_year == 'run'
         run: docker exec cpue-workshop python scripts/run_stage.py prepare_year
+        background: true
+      - name: Wait for prepared inputs
+        wait-all:
       - name: "04 Assessment: vessel, lower M${{ steps.plan.outputs.assessment_vessel_ref == 'reuse' && ' · reused' || '' }}"
         if: steps.plan.outputs.assessment_vessel_ref == 'run'
         run: docker exec cpue-workshop python scripts/run_stage.py assessment_vessel_ref
+        background: true
       - name: "04 Assessment: vessel, higher M${{ steps.plan.outputs.assessment_vessel_high_m == 'reuse' && ' · reused' || '' }}"
         if: steps.plan.outputs.assessment_vessel_high_m == 'run'
         run: docker exec cpue-workshop python scripts/run_stage.py assessment_vessel_high_m
+        background: true
       - name: "04 Assessment: year, lower M${{ steps.plan.outputs.assessment_year_ref == 'reuse' && ' · reused' || '' }}"
         if: steps.plan.outputs.assessment_year_ref == 'run'
         run: docker exec cpue-workshop python scripts/run_stage.py assessment_year_ref
+        background: true
       - name: "04 Assessment: year, higher M${{ steps.plan.outputs.assessment_year_high_m == 'reuse' && ' · reused' || '' }}"
         if: steps.plan.outputs.assessment_year_high_m == 'run'
         run: docker exec cpue-workshop python scripts/run_stage.py assessment_year_high_m
+        background: true
+      - name: Wait for assessment analyses
+        wait-all:
       - name: "05 Results synthesis${{ steps.plan.outputs.synthesis == 'reuse' && ' · reused' || '' }}"
         if: steps.plan.outputs.synthesis == 'run'
         run: docker exec cpue-workshop python scripts/run_stage.py synthesis

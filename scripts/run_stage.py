@@ -6,6 +6,7 @@ import runpy
 import shutil
 import sys
 import time
+from datetime import datetime, timezone
 from workflow_plan import fingerprints, hashes, PARENTS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,13 +41,17 @@ os.environ['TOY_CPUE_CHOICE'] = ('vessel_adjusted' if key.endswith('_vessel') el
 os.environ['TOY_ASSESSMENT_CASE'] = key if key.startswith('assessment_') else ''
 stage = ('cpue' if key.startswith('cpue_') else 'prepare_inputs' if key.startswith('prepare_') else 'assessment' if key.startswith('assessment_') else key)
 started = time.perf_counter()
+started_at = datetime.now(timezone.utc).isoformat()
 runpy.run_path(str(ROOT / 'pipeline' / (stage + '.py')), run_name='__main__')
 compute_seconds = time.perf_counter() - started
 record = {'stage': key, 'fingerprint': plan['stages'][key]['fingerprint'] if plan else fingerprints()[key],
           'run_id': os.getenv('GITHUB_RUN_ID', 'local'), 'attempt': os.getenv('GITHUB_RUN_ATTEMPT', '1'),
+          'code_commit': os.getenv('TOY_CODE_COMMIT', 'local'), 'started_at': started_at,
           'compute_seconds': compute_seconds, 'outputs': hashes(work / 'outputs')}
 (work / 'record.json').write_text(json.dumps(record, indent=2) + '\n')
 pause = min(8, max(0, float(os.getenv('TOY_DEMO_PACE_SECONDS', '0'))))
 if pause:
     print(f'PRESENTATION PACE: {key}; computation {compute_seconds:.3f} s; hold this GitHub step for {pause:g} s', flush=True)
     time.sleep(pause)
+record['completed_at'] = datetime.now(timezone.utc).isoformat()
+(work / 'record.json').write_text(json.dumps(record, indent=2) + '\n')

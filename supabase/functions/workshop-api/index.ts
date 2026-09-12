@@ -1,4 +1,4 @@
-import {change,changeable,current,consoleLines,output,ensureBranch} from './github.ts';
+import {change,changeable,current,consoleLines,output,outputStage,outputNames,stageOutputs,ensureBranch} from './github.ts';
 import {rpc,cached,invalidate} from './database.ts';
 import {maintain,observe,pendingUpdate} from './lifecycle.ts';
 import batches from './batches.json' with {type:'json'};
@@ -33,10 +33,13 @@ export async function handle(request:Request){
    if(path==='/api/presentation-info')return reply({presentation:'cpue-workshop',hosted:true,enabled:enabled()});
    if(path==='/api/status')return reply(await status());
    if(path==='/api/console'){const s=await status();if(!s.ready)return reply({ready:false,lines:[]});return reply(await cached('console:'+s.run_id+':'+s.attempt,3600,()=>consoleLines(s)));}
-   if(path==='/api/output'){
+   if(path==='/api/output'||path==='/api/outputs'){
     const source=u.searchParams.get('job')||'',file=u.searchParams.get('file')||'';
-    if(!/^\d+-\d+-report$/.test(source)||!['report.html','manifest.json','summary.csv','cpue.svg','biomass.svg'].includes(file))return reply({detail:'Unknown output.'},400);
-    const value=await cached('output:'+source+':'+file,3600,()=>output(source,file));
+    const stage=outputStage(source);
+    if(!stage||(path==='/api/output'&&!outputNames(stage[3]).includes(file)))return reply({detail:'Unknown output.'},400);
+    const files=await cached('output:'+source+':bundle',3600,()=>stageOutputs(source));
+    if(path==='/api/outputs')return reply({files:Object.keys(files)});
+    const value=files[file];if(value===undefined)return reply({detail:'Output not found.'},404);
     // HTML/SVG are delivered as data. The slide renders them in a sandboxed frame.
     return new Response(value,{headers:{...cors,'Content-Type':file.endsWith('.json')?'application/json':'text/plain; charset=utf-8'}});
    }

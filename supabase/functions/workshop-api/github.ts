@@ -14,6 +14,16 @@ export const definitions = [
  ['report','06 Report',['synthesis']],
 ] as const;
 export const changeable = new Set(definitions.map(x=>x[0]));
+export function outputNames(key:string):string[]{
+ const common=['manifest.json','record.json'];
+ if(key==='extract')return ['sets.csv','catch.csv','extract.sql','extract-catch.sql',...common];
+ if(key.startsWith('cpue_'))return ['cpue.csv','cpue-diagnostics.txt','cpue-diagnostics.json',...common];
+ if(key.startsWith('prepare_'))return ['assessment-input.csv','catch.csv','cpue.csv',...common];
+ if(key.startsWith('assessment_'))return ['biomass.csv','summary.csv','assessment-input.csv',...common];
+ if(['synthesis','report'].includes(key))return [...(key==='report'?['report.html']:[]),'cpue.svg','biomass.svg','summary.csv','biomass.csv','cpue.csv',...common];
+ return [];
+}
+export function outputStage(source:string){const match=source.match(/^(\d+)-(\d+)-([a-z_]+)$/);return match&&changeable.has(match[3] as any)?match:null;}
 export async function github(path:string, method='GET', body?:unknown, allowMissing=false):Promise<Response> {
  const token=Deno.env.get('WORKSHOP_GITHUB_TOKEN');
  const headers:Record<string,string>={'Accept':'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'cpue-workshop','Content-Type':'application/json'};
@@ -36,7 +46,7 @@ export function mapRun(run:any,jobs:any[]){
  trigger_message:run.display_title.startsWith('Database version ')?run.display_title:(run.head_commit?.message||run.display_title).split('\n')[0].slice(0,160),database_version:/^Database version 20\d{2}$/.test(run.display_title)?Number(run.display_title.slice(-4)):null,
  execution:{mode:'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};
 }
-export function emptyRun(){return {ready:true,has_run:false,stages:definitions.map(([key,label,parents])=>({key,label:label.slice(3),parents,status:'waiting',reused:false,source_id:'',_step_number:null})),run_id:null,number:null,attempt:null,run_url:'',commit:'',status:'completed',conclusion:'success',database_version:2023,execution:{mode:'steps',job_count:0,jobs:[]},source:{stale:false,last_success:new Date().toISOString()},created_at:null,completed_at:null};}
+export function emptyRun(){return {ready:true,has_run:false,baseline_available:true,stages:definitions.map(([key,label,parents])=>({key,label:label.slice(3),parents,status:'waiting',reused:false,source_id:'',_step_number:null})),run_id:null,number:null,attempt:null,run_url:'',commit:'',status:'completed',conclusion:'success',database_version:2023,execution:{mode:'steps',job_count:0,jobs:[]},source:{stale:false,last_success:new Date().toISOString()},created_at:null,completed_at:null};}
 export async function current(){const runs=(await json('actions/workflows/update.yml/runs?per_page=1')).workflow_runs;
  if(!runs.length)return emptyRun();const r=runs[0];const jobs=(await json(`actions/runs/${r.id}/attempts/${r.run_attempt}/jobs?per_page=100`)).jobs;
  return mapRun(r,jobs);
@@ -72,16 +82,20 @@ async function download(response:Response,limit:number):Promise<Uint8Array>{
  for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>limit){await reader.cancel();throw Error('Output exceeds demonstration limit.');}chunks.push(value);}
  const bytes=new Uint8Array(size);let offset=0;for(const c of chunks){bytes.set(c,offset);offset+=c.length;}return bytes;
 }
-export async function output(source:string,file:string){
- const id=source.match(/^(\d+)-(\d+)-report$/);if(!id||!['report.html','manifest.json','summary.csv','cpue.svg','biomass.svg'].includes(file))throw Error('Unknown output.');
+export async function stageOutputs(source:string){
+ const id=outputStage(source);if(!id)throw Error('Unknown output.');
  const run=await json('actions/runs/'+id[1]);if(run.path!=='.github/workflows/update.yml'||run.conclusion!=='success'||run.run_attempt!==Number(id[2]))throw Error('Unknown successful workshop run.');
  const a=(await json(`actions/runs/${id[1]}/artifacts?per_page=100`)).artifacts.find((x:any)=>x.name==='workflow-'+id[2]&&!x.expired);
  if(!a||a.size_in_bytes>16*1024*1024)throw Error('Report artifact unavailable.');
  const bytes=await download(await github(`actions/artifacts/${a.id}/zip`),16*1024*1024);
  if(a.digest?.startsWith('sha256:')){const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new Uint8Array(bytes).buffer))).map(x=>x.toString(16).padStart(2,'0')).join('');if(a.digest!=='sha256:'+hash)throw Error('Artifact checksum mismatch.');}
- const wanted='report/outputs/'+file;
- const entries=unzipSync(bytes,{filter:f=>f.name===wanted&&f.originalSize<=2*1024*1024});
- if(!entries[wanted])throw Error('Output not found.');return new TextDecoder().decode(entries[wanted]);
+ const wanted=new Map(outputNames(id[3]).map(name=>[id[3]+(name==='record.json'?'/':'/outputs/')+name,name]));
+ const entries=unzipSync(bytes,{filter:f=>wanted.has(f.name)&&f.originalSize<=2*1024*1024});
+ return Object.fromEntries(Object.entries(entries).map(([path,value])=>[wanted.get(path),new TextDecoder().decode(value)]));
+}
+export async function output(source:string,file:string){
+ const id=outputStage(source);if(!id||!outputNames(id[3]).includes(file))throw Error('Unknown output.');
+ const files=await stageOutputs(source);if(!(file in files))throw Error('Output not found.');return files[file];
 }
 export async function consoleLines(status:any){
  if(status.status!=='completed'||!status.execution?.jobs?.[0])return {ready:false,lines:[]};

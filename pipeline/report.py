@@ -23,6 +23,10 @@ if plan_path.exists():
     manifest['workflow_plan'] = json.loads(plan_path.read_text())
     manifest['github_run_id'] = os.getenv('GITHUB_RUN_ID', 'local')
     manifest['github_run_attempt'] = os.getenv('GITHUB_RUN_ATTEMPT', '1')
+    manifest.setdefault('extraction_code_commit', manifest['git_commit'])
+    manifest['git_commit'] = os.getenv('TOY_CODE_COMMIT', manifest['git_commit'])
+    manifest['execution_mode'] = os.getenv('TOY_EXECUTION_MODE', manifest.get('execution_mode'))
+    manifest['runner_image'] = os.getenv('ImageVersion', manifest['runner_image'])
 rows = list(csv.DictReader((OUT / "summary.csv").open()))
 series = list(csv.DictReader((OUT / "biomass.csv").open()))
 colors = {"vessel_adjusted": "#007c83", "year_only": "#d27547"}
@@ -35,7 +39,7 @@ manifest['dependencies'] = {'extract': [], 'cpue_vessel': ['extract'], 'cpue_yea
     'prepare_vessel': ['extract', 'cpue_vessel'], 'prepare_year': ['extract', 'cpue_year'],
     **{case['key']: ['prepare_vessel' if case['choice'] == 'vessel_adjusted' else 'prepare_year'] for case in case_definitions},
     'synthesis': [case['key'] for case in case_definitions], 'report': ['synthesis']}
-manifest['execution'] = ('11 dependency-linked stages; changed stages execute and matching outputs are reused in one GitHub job' if manifest.get('execution_mode') == 'single_runner_steps' else 'independent GitHub jobs') if 'collection' in manifest else 'local stages using the same case definitions'
+manifest['execution'] = ('One GitHub runner; independent CPUE, input-preparation and assessment analyses run in parallel; matching outputs are reused' if manifest.get('execution_mode') == 'parallel_steps' else '11 dependency-linked stages in one GitHub job') if 'collection' in manifest else 'local stages using the same case definitions'
 manifest['report_format'] = 'standalone HTML; Python standard library'
 manifest['configuration'] = {
     'repository': os.getenv('TOY_DATA_REPOSITORY', manifest.get('code_repository', 'kyuhank/cpue-actions-demo')),

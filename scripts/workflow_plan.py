@@ -28,10 +28,18 @@ def hashes(folder):
     return {str(p.relative_to(folder)): digest(p.read_bytes()) for p in sorted(folder.rglob('*')) if p.is_file()}
 
 
+def code_digest():
+    # Commits still identify every execution. Reuse follows the actual calculation
+    # code, so adding documentation or a baseline archive does not invalidate it.
+    paths = [p for p in sorted((ROOT / 'pipeline').iterdir()) if p.suffix in ('.py', '.sql', '.json')]
+    paths += [ROOT / 'scripts' / name for name in ('run_stage.py', 'workflow_plan.py')]
+    return digest(b''.join(str(p.relative_to(ROOT)).encode() + b'\0' + p.read_bytes() for p in paths))
+
+
 def fingerprints():
     config = stage_settings()
     source = ROOT / os.getenv('TOY_SOURCE_DATABASE', 'data/toy-fishery.sqlite')
-    code = os.getenv('TOY_CODE_COMMIT') or digest(b''.join(str(p.relative_to(ROOT)).encode() + b'\0' + p.read_bytes() for folder in ('scripts', 'pipeline') for p in sorted((ROOT / folder).iterdir()) if p.suffix in ('.py', '.sql', '.json')))
+    code = code_digest()
     result = {}
     for key, parents in PARENTS.items():
         inputs = {'code': code, 'image': os.getenv('TOY_CONTAINER_IMAGE', 'local'),
@@ -69,6 +77,10 @@ def download_previous(target):
     content = gh(f'repos/{repo}/actions/artifacts/{artifact["id"]}/zip')
     if artifact.get('digest') != 'sha256:' + digest(content):
         raise ValueError('Previous artifact digest does not match')
+    unpack(content, target)
+
+
+def unpack(content, target):
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
         members = archive.infolist()
         if len(members) > 500 or sum(m.file_size for m in members) > 32 * 1024 * 1024:
@@ -92,21 +104,32 @@ def plan(previous=None):
         except (RuntimeError, ValueError, subprocess.TimeoutExpired):
             print('No verified reusable artifact; rebuilding the complete chain.')
             shutil.rmtree(previous, ignore_errors=True)
+    baseline = ROOT / '.baseline-workflow'
+    archive = ROOT / 'baseline/workflow.zip'
+    if archive.exists() and not baseline.exists():
+        metadata = json.loads((archive.parent / 'manifest.json').read_text())
+        if digest(archive.read_bytes()) != metadata['sha256']:
+            raise ValueError('Baseline archive checksum mismatch')
+        unpack(archive.read_bytes(), baseline)
     stages = ROOT / 'stages'
     stages.mkdir(exist_ok=True)
     records = {}
     for key in PARENTS:
-        source = previous / key
-        record_path = source / 'record.json'
-        record = json.loads(record_path.read_text()) if record_path.exists() else {}
-        reuse = (key != 'report' and record.get('fingerprint') == fingerprints_now[key]
-                 and bool(record.get('outputs')) and record['outputs'] == hashes(source / 'outputs'))
+        record, reuse, source = {}, False, None
+        for candidate in (previous / key, baseline / key):
+            record_path = candidate / 'record.json'
+            candidate_record = json.loads(record_path.read_text()) if record_path.exists() else {}
+            if (key != 'report' and candidate_record.get('fingerprint') == fingerprints_now[key]
+                    and candidate_record.get('outputs') and candidate_record['outputs'] == hashes(candidate / 'outputs')):
+                source, record, reuse = candidate, candidate_record, True
+                break
         if reuse:
             shutil.copytree(source, stages / key)
         records[key] = {'action': 'reuse' if reuse else 'run', 'fingerprint': fingerprints_now[key],
                         'parents': PARENTS[key], 'settings': stage_settings().get(key, {}),
-                        'origin_run': record.get('run_id') if reuse else os.getenv('GITHUB_RUN_ID', 'local')}
-    value = {'run_id': os.getenv('GITHUB_RUN_ID', 'local'), 'trigger_commit': os.getenv('TOY_DATA_COMMIT', 'local'), 'stages': records}
+                        'origin_run': record.get('run_id') if reuse else os.getenv('GITHUB_RUN_ID', 'local'),
+                        'origin_code_commit': record.get('code_commit') if reuse else os.getenv('TOY_CODE_COMMIT', 'local')}
+    value = {'run_id': os.getenv('GITHUB_RUN_ID', 'local'), 'trigger_commit': os.getenv('TOY_DATA_COMMIT', 'local'), 'code_sha256': code_digest(), 'stages': records}
     (stages / '_plan.json').write_text(json.dumps(value, indent=2) + '\n')
     if os.getenv('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:

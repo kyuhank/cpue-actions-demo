@@ -43,7 +43,7 @@ def check_saved_report():
         download = Downloads(); download.feed(saved_html)
         provenance = json.loads(download.files['provenance.json'])
         assert hashlib.sha256(download.files['source.sqlite']).hexdigest() == provenance['source_sha256']
-        assert provenance['git_commit'] == 'a' * 40 and len(provenance['stage_records']) == 10
+        assert provenance['git_commit'] == 'a' * 40 and len(provenance['stage_records']) == 12
         assert 'https://github.com/kyuhank/cpue-actions-demo/commit/' + 'a' * 40 in saved_html
         assert provenance == json.loads((root / 'stages/report/outputs/manifest.json').read_text())
         # Lose the original checkout and artifacts: use only the saved report.

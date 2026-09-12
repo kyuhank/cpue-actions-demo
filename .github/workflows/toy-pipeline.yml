@@ -223,7 +223,7 @@ jobs:
       TOY_EXECUTION_MODE: module_jobs
       TOY_GITHUB_JOB: workshop
       TOY_STAGE_CONFIG: ${{ inputs.data_repository && 'source-data/config/stages.json' || 'config/stages.json' }}
-      TOY_DEMO_PACE_SECONDS: 1
+      TOY_DEMO_PACE_SECONDS: 0
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       TOY_DATABASE_VERSION: ${{ inputs.data_version }}
     steps:
@@ -272,94 +272,96 @@ jobs:
           path: workflow-context.tar.gz
           retention-days: 1
           if-no-files-found: error
+  # Prepare independent runners together. The module verifies the previous group
+  # before calculating; unchanged stage outputs stay reusable.
   extract:
     name: "[extract] ${{ needs.prepare.outputs.extract == 'reuse' && '· reused' || '' }}"
     needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.extract == 'run' }}
-    uses: kyuhank/cpue-demo-extract/.github/workflows/stage.yml@a0716f589325a5576f5b9d97990e3977c17bad36
+    uses: kyuhank/cpue-demo-extract/.github/workflows/stage.yml@c50604b17106905deb03fdada558d5b745e9257a
     with:
       stage: extract
   cpue_vessel:
     name: "[cpue_vessel] ${{ needs.prepare.outputs.cpue_vessel == 'reuse' && '· reused' || '' }}"
-    needs: [prepare, extract]
+    needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.cpue_vessel == 'run' }}
-    uses: kyuhank/cpue-demo-cpue/.github/workflows/stage.yml@b2c79ee958c6e7128be347078b7ea9e29c642bc4
+    uses: kyuhank/cpue-demo-cpue/.github/workflows/stage.yml@961a56e8e140bf719ef0caf0dc40171c1d18b60e
     with:
       stage: cpue_vessel
   cpue_year:
     name: "[cpue_year] ${{ needs.prepare.outputs.cpue_year == 'reuse' && '· reused' || '' }}"
-    needs: [prepare, extract]
+    needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.cpue_year == 'run' }}
-    uses: kyuhank/cpue-demo-cpue/.github/workflows/stage.yml@b2c79ee958c6e7128be347078b7ea9e29c642bc4
+    uses: kyuhank/cpue-demo-cpue/.github/workflows/stage.yml@961a56e8e140bf719ef0caf0dc40171c1d18b60e
     with:
       stage: cpue_year
   cpue_summary:
     name: "[cpue_summary] ${{ needs.prepare.outputs.cpue_summary == 'reuse' && '· reused' || '' }}"
-    needs: [prepare, cpue_vessel, cpue_year]
+    needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.cpue_summary == 'run' }}
-    uses: kyuhank/cpue-demo-cpue/.github/workflows/stage.yml@224bd2de948fac7d1213f2e8b918c22b214620c0
+    uses: kyuhank/cpue-demo-cpue/.github/workflows/stage.yml@961a56e8e140bf719ef0caf0dc40171c1d18b60e
     with:
       stage: cpue_summary
   cpue_report:
     name: "[cpue_report] ${{ needs.prepare.outputs.cpue_report == 'reuse' && '· reused' || '' }}"
-    needs: [prepare, cpue_summary]
+    needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.cpue_report == 'run' }}
-    uses: kyuhank/cpue-demo-cpue/.github/workflows/stage.yml@224bd2de948fac7d1213f2e8b918c22b214620c0
+    uses: kyuhank/cpue-demo-cpue/.github/workflows/stage.yml@961a56e8e140bf719ef0caf0dc40171c1d18b60e
     with:
       stage: cpue_report
   prepare_vessel:
     name: "[prepare_vessel] ${{ needs.prepare.outputs.prepare_vessel == 'reuse' && '· reused' || '' }}"
-    needs: [prepare, extract, cpue_vessel]
+    needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.prepare_vessel == 'run' }}
-    uses: kyuhank/cpue-demo-inputs/.github/workflows/stage.yml@402a3bc75db66afa8074f75ef25201b4d1b6bdb4
+    uses: kyuhank/cpue-demo-inputs/.github/workflows/stage.yml@0877c2c838e1760285c5f82e1c670e22fa4d9140
     with:
       stage: prepare_vessel
   prepare_year:
     name: "[prepare_year] ${{ needs.prepare.outputs.prepare_year == 'reuse' && '· reused' || '' }}"
-    needs: [prepare, extract, cpue_year]
+    needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.prepare_year == 'run' }}
-    uses: kyuhank/cpue-demo-inputs/.github/workflows/stage.yml@402a3bc75db66afa8074f75ef25201b4d1b6bdb4
+    uses: kyuhank/cpue-demo-inputs/.github/workflows/stage.yml@0877c2c838e1760285c5f82e1c670e22fa4d9140
     with:
       stage: prepare_year
   assessment_vessel_ref:
     name: "[assessment_vessel_ref] ${{ needs.prepare.outputs.assessment_vessel_ref == 'reuse' && '· reused' || '' }}"
-    needs: [prepare, prepare_vessel]
+    needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.assessment_vessel_ref == 'run' }}
-    uses: kyuhank/cpue-demo-assessment/.github/workflows/stage.yml@86d7704fd2eaa9b5482acaad16adc0c0a820ddf7
+    uses: kyuhank/cpue-demo-assessment/.github/workflows/stage.yml@3c9b6989b4afbe2a3004779c1ac98cf4d4471eae
     with:
       stage: assessment_vessel_ref
   assessment_vessel_high_m:
     name: "[assessment_vessel_high_m] ${{ needs.prepare.outputs.assessment_vessel_high_m == 'reuse' && '· reused' || '' }}"
-    needs: [prepare, prepare_vessel]
+    needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.assessment_vessel_high_m == 'run' }}
-    uses: kyuhank/cpue-demo-assessment/.github/workflows/stage.yml@86d7704fd2eaa9b5482acaad16adc0c0a820ddf7
+    uses: kyuhank/cpue-demo-assessment/.github/workflows/stage.yml@3c9b6989b4afbe2a3004779c1ac98cf4d4471eae
     with:
       stage: assessment_vessel_high_m
   assessment_year_ref:
     name: "[assessment_year_ref] ${{ needs.prepare.outputs.assessment_year_ref == 'reuse' && '· reused' || '' }}"
-    needs: [prepare, prepare_year]
+    needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.assessment_year_ref == 'run' }}
-    uses: kyuhank/cpue-demo-assessment/.github/workflows/stage.yml@86d7704fd2eaa9b5482acaad16adc0c0a820ddf7
+    uses: kyuhank/cpue-demo-assessment/.github/workflows/stage.yml@3c9b6989b4afbe2a3004779c1ac98cf4d4471eae
     with:
       stage: assessment_year_ref
   assessment_year_high_m:
     name: "[assessment_year_high_m] ${{ needs.prepare.outputs.assessment_year_high_m == 'reuse' && '· reused' || '' }}"
-    needs: [prepare, prepare_year]
+    needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.assessment_year_high_m == 'run' }}
-    uses: kyuhank/cpue-demo-assessment/.github/workflows/stage.yml@86d7704fd2eaa9b5482acaad16adc0c0a820ddf7
+    uses: kyuhank/cpue-demo-assessment/.github/workflows/stage.yml@3c9b6989b4afbe2a3004779c1ac98cf4d4471eae
     with:
       stage: assessment_year_high_m
   synthesis:
     name: "[synthesis] ${{ needs.prepare.outputs.synthesis == 'reuse' && '· reused' || '' }}"
-    needs: [prepare, assessment_vessel_ref, assessment_vessel_high_m, assessment_year_ref, assessment_year_high_m]
+    needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.synthesis == 'run' }}
-    uses: kyuhank/cpue-demo-synthesis/.github/workflows/stage.yml@2f0879bfe74c9d3131f38ec0fd38473582391518
+    uses: kyuhank/cpue-demo-synthesis/.github/workflows/stage.yml@d4cd577b8a8ddc6645fe0eccd29b8728bc0bfe84
     with:
       stage: synthesis
   report:
     name: "[report] ${{ needs.prepare.outputs.report == 'reuse' && '· reused' || '' }}"
-    needs: [prepare, synthesis, cpue_report]
+    needs: [prepare]
     if: ${{ always() && !cancelled() && !contains(needs.*.result, 'failure') && needs.prepare.result == 'success' && needs.prepare.outputs.report == 'run' }}
-    uses: kyuhank/cpue-demo-report/.github/workflows/stage.yml@0815afc29e18be64c2db70fd562e81b40a2950ec
+    uses: kyuhank/cpue-demo-report/.github/workflows/stage.yml@3ebe16ea44da177503348e0cda7c91552c09199c
     with:
       stage: report

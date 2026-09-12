@@ -48,3 +48,12 @@ Deno.test('Independent runners expose setup, reused inputs and failure states pe
  assert(result.stages.find(s=>s.key==='cpue_year')?.status==='failed');
  assert(result.stages.find(s=>s.key==='report')?.status==='waiting');
 });
+
+Deno.test('A warm runner waiting for its group is not an analysis in progress',()=>{
+ const run={id:1,run_attempt:1,run_number:1,html_url:'',head_sha:'a'.repeat(40),status:'in_progress',display_title:'test'};
+ const barrier={name:'Wait for previous stage group and verify inputs',status:'in_progress'};
+ const module:any={name:'Run module',status:'pending'};
+ const jobs=[{name:'[plan]',status:'completed',conclusion:'success',steps:[]},{name:'[cpue_vessel] / run / Execute',status:'in_progress',steps:[barrier,module]}];
+ equal(mapRun(run,jobs).stages.find(s=>s.key==='cpue_vessel')?.status,'waiting');
+ module.status='in_progress';equal(mapRun(run,jobs).stages.find(s=>s.key==='cpue_vessel')?.status,'running');
+});

@@ -70,3 +70,18 @@
 .quality-gate .source-link{font-size:10px;right:-1px;top:-5px}
 .submission-node.impacted,.quality-gate.impacted,.ingest-node.impacted{box-shadow:0 0 0 1px #24734350}
 .submission-node.needs-correction{background:#fff2ee;border-color:#be593d}
+
+.data-node.outside-impact{opacity:.38}
+.data-node.reused .database-body,.data-node.reused .database-shell ellipse{stroke-dasharray:4 3}
+.data-node.reused .database-body{fill:#f5f7f8}.data-node.reused .database-shell ellipse{fill:#edf2f3}
+.data-node.impacted .database-body,.data-node.impacted .database-shell ellipse{stroke:#247343;stroke-width:1.7;stroke-dasharray:none}
+.stage.running,.stage.running.selected,.stage.running.impacted,.submission-node.running,.quality-gate.running,.ingest-node.running{opacity:1;border:2px solid #bc8831;background:#fff3d9;box-shadow:0 0 0 3px #bc883124;animation:job-glow 1.6s ease-in-out infinite}
+.stage.running strong,.stage.running small,.quality-gate.running,.ingest-node.running{color:#946012}
+@keyframes job-glow{50%{box-shadow:0 0 0 5px #bc88313b}}
+.edges>path.corrected-return{stroke:#25856e;stroke-dasharray:3 3;animation:none}
+.record{background:#edf5fa;border-left:3px solid #0085ca;border-radius:5px;padding:9px 11px;min-height:43px;gap:9px}
+.record #message{font-size:13px;font-weight:600;color:#21465f;white-space:normal;line-height:1.4}
+.record time{font-size:10px;white-space:nowrap}.record button{font-size:11px;white-space:nowrap}
+.record[data-phase=running],.record[data-phase=correction]{background:#fff5e1;border-left-color:#bc8831}
+.record[data-phase=failed]{background:#fff0e9;border-left-color:#be593d}
+.record[data-phase=complete]{background:#eef7f1;border-left-color:#25856e}

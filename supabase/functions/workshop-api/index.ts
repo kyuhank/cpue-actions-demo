@@ -11,7 +11,7 @@ async function status(){
  const database=await cached('database:current',10,()=>rpc('cpue_snapshot',{p_version:null}));
  const pending=pendingUpdate(limits,s),demo=enabled()?await observe(s,limits):await rpc('workshop_demo_state');
  const can=enabled()&&demo.phase!=='cleaning'&&!pending&&limits.remaining>0&&(!limits.next_update||Date.parse(limits.next_update)<=Date.now())&&s.status==='completed';
- const record=limits.last_request;let intake=record?.result?.quality_check?{quality_check:record.result.quality_check,published:record.result.published,checked_at:Date.parse(record.created_at)/1000}:null;
+ const record=limits.last_request;let intake:{quality_check:any,published:boolean,checked_at:number,first_quality_check?:any,correction?:any}|null=record?.result?.quality_check?{quality_check:record.result.quality_check,published:record.result.published,checked_at:Date.parse(record.created_at)/1000}:null;
  if(intake&&!intake.published&&Date.parse(s.created_at)>intake.checked_at*1000)intake=null;
  if(s.has_run&&s.status==='completed'&&s.conclusion==='success'){
   try{const raw=await cached('output:'+s.run_id+'-'+s.attempt+'-report:manifest.json',3600,()=>output(s.run_id+'-'+s.attempt+'-report','manifest.json'));const m=JSON.parse(raw);
@@ -20,7 +20,7 @@ async function status(){
  }
  const qcJob=s.intake_stages?.find((j:any)=>j.key==='qc');
  if(qcJob&&['completed','failed'].includes(qcJob.status)){
-  try{const files=await cached('intake:'+qcJob.source_id,600,()=>stageOutputs(qcJob.source_id));intake={quality_check:JSON.parse(files['quality.json']),published:s.intake_stages.some((j:any)=>j.key==='ingest'&&j.status==='completed'),checked_at:Date.parse(s.created_at)/1000};}catch{}
+  try{const files=await cached('intake:'+qcJob.source_id,600,()=>stageOutputs(qcJob.source_id));intake={quality_check:JSON.parse(files['quality.json']),first_quality_check:files['first-quality.json']?JSON.parse(files['first-quality.json']):null,correction:files['correction.json']?JSON.parse(files['correction.json']):null,published:s.intake_stages.some((j:any)=>j.key==='ingest'&&j.status==='completed'),checked_at:Date.parse(s.created_at)/1000};}catch{}
  }
  if(!s.has_run&&intake&&(intake.published||intake.checked_at*1000<=Date.parse(demo.last_reset_at||'1970-01-01')))intake=null;
  return {...s,demo,data_versions:database.version>=2024?[2021,2022,2023,2024]:[2021,2022,2023],latest_database_version:database.version,database_connected:true,data_intake:intake,session:{can_update:can,remaining:limits.remaining,next_update:limits.next_update,message:!enabled()?'Cloud execution is awaiting the owner’s restricted GitHub connection.':demo.phase==='cleaning'?'Resetting the demonstration. The next run will start from the baseline.':pending?'The update is stored; waiting for GitHub to acknowledge the next run.':limits.remaining===0?'Daily limit reached. You can still inspect the current run.':!can?'Wait for the current run and the short update interval.':`${limits.remaining} shared updates available today.`}};

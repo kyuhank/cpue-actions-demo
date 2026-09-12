@@ -35,3 +35,16 @@ Deno.test('Real skipped steps are reuse only after successful verified restore; 
  steps[3].status='in_progress';equal(mapRun(run,[{id:8,steps}]).stages.filter(s=>s.status==='running').length,2);
  steps[0].conclusion='failure';equal(mapRun(run,[{id:8,steps}]).stages[0].reused,false);
 });
+
+Deno.test('Independent runners expose setup, reused inputs and failure states per module',()=>{
+ const assert=(value:unknown)=>{if(!value)throw Error('Unexpected module runner state');};
+ const run={id:1,run_attempt:1,run_number:1,html_url:'',head_sha:'a'.repeat(40),status:'in_progress',head_branch:'main',display_title:'test',created_at:'2026-09-12T00:00:00Z'};
+ const jobs=[{id:1,name:'[plan]',status:'completed',conclusion:'success',steps:[]},{id:2,name:'[extract] · reused / run / Execute',status:'completed',conclusion:'skipped',steps:[]},{id:3,name:'[cpue_vessel] / run / Execute',status:'in_progress',steps:[{name:'Pull container image',status:'in_progress',number:5}]},{id:4,name:'[cpue_year] / run / Execute',status:'completed',conclusion:'failure',steps:[]}];
+ const result=mapRun(run,jobs);
+ assert(result.execution.mode==='module_jobs');
+ assert(result.stages.find(s=>s.key==='extract')?.reused);
+ assert(result.stages.find(s=>s.key==='cpue_vessel')?.status==='running');
+ assert(result.stages.find(s=>s.key==='cpue_vessel')?._job_id===3);
+ assert(result.stages.find(s=>s.key==='cpue_year')?.status==='failed');
+ assert(result.stages.find(s=>s.key==='report')?.status==='waiting');
+});

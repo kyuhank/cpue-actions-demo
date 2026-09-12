@@ -34,18 +34,21 @@ export async function github(path:string, method='GET', body?:unknown, allowMiss
 }
 export async function json(path:string){return (await github(path)).json();}
 export function mapRun(run:any,jobs:any[]){
- const physical=jobs[0], steps=physical?.steps||[], states:Record<string,string>={};
+ const distributed=jobs.some(j=>/\[(?:plan|extract)\]/.test(j.name));
+ const physical=distributed?jobs.find(j=>j.name.includes('[plan]')):jobs[0], steps=physical?.steps||[], states:Record<string,string>={};
  const restored=steps.some((s:any)=>s.name==='Restore and verify reusable outputs'&&s.conclusion==='success');
  const stages=definitions.map(([key,label,parents])=>{
-  const step=steps.find((s:any)=>s.name.replace(/ · reused$/,'').replace(/ \(0\.\d+\)/,'')===label);
-  const reused=!!step&&step.name.endsWith(' · reused')&&step.conclusion==='skipped'&&restored;
+  const job=distributed?jobs.find(j=>j.name.includes('['+key+']')):physical;
+  const step=distributed?job?.steps?.find((s:any)=>s.name==='Run module'):steps.find((s:any)=>s.name.replace(/ · reused$/,'').replace(/ \(0\.\d+\)/,'')===label);
+  const reused=distributed?job?.conclusion==='skipped'&&job.name.includes('· reused'):!!step&&step.name.endsWith(' · reused')&&step.conclusion==='skipped'&&restored;
   let state=reused?'completed':step?.status==='in_progress'?'running':step?.status==='completed'?({success:'completed',failure:'failed',cancelled:'cancelled',skipped:'blocked',timed_out:'failed'} as any)[step.conclusion]||'blocked':run.status==='completed'?'blocked':restored&&parents.every(p=>states[p]==='completed')?'idle':'waiting';
+  if(distributed)state=reused?'completed':job?.status==='in_progress'?'running':job?.status==='completed'?({success:'completed',failure:'failed',cancelled:'cancelled',skipped:'blocked',timed_out:'failed'} as any)[job.conclusion]||'blocked':run.status==='completed'?'blocked':'waiting';
   states[key]=state;
-  return {key,label:label.slice(3),parents,status:state,reused,source_id:`${run.id}-${run.run_attempt}-${key}`,started_at:step?.started_at,completed_at:step?.completed_at,html_url:physical?.html_url,_step_number:step?.number};
+  return {key,label:label.slice(3),parents,status:state,reused,source_id:`${run.id}-${run.run_attempt}-${key}`,started_at:distributed?job?.started_at:step?.started_at,completed_at:distributed?job?.completed_at:step?.completed_at,html_url:job?.html_url,_job_id:job?.id,_step_number:step?.number};
  });
  return {ready:true,has_run:true,stages,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
  trigger_message:run.display_title.startsWith('Database version ')?run.display_title:(run.head_commit?.message||run.display_title).split('\n')[0].slice(0,160),database_version:/^Database version 20\d{2}$/.test(run.display_title)?Number(run.display_title.slice(-4)):null,
- execution:{mode:'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};
+ execution:{mode:distributed?'module_jobs':'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};
 }
 export function emptyRun(){return {ready:true,has_run:false,baseline_available:true,stages:definitions.map(([key,label,parents])=>({key,label:label.slice(3),parents,status:'waiting',reused:false,source_id:'',_step_number:null})),run_id:null,number:null,attempt:null,run_url:'',commit:'',status:'completed',conclusion:'success',database_version:2023,execution:{mode:'steps',job_count:0,jobs:[]},source:{stale:false,last_success:new Date().toISOString()},created_at:null,completed_at:null};}
 type ModuleSource={repository:string,branch:string,commit:string};
@@ -164,11 +167,11 @@ export async function change(stage:string){
 export function parseSelection(text:string){
  if(text.length>2048)throw Error('Workshop selection is too large.');
  const value=JSON.parse(text);
- if(!value||Array.isArray(value)||Object.keys(value).sort().join(',')!=='branches,start'
+ if(!value||Array.isArray(value)||Object.keys(value).some(k=>!['branches','start','data_version'].includes(k))||(value.data_version!==undefined&&![2023,2024].includes(value.data_version))
     ||(value.start!=='data'&&!changeable.has(value.start))||!value.branches||typeof value.branches!=='object'||Array.isArray(value.branches)
     ||Object.keys(value.branches).length>definitions.length)throw Error('Choose a stage and registered branches.');
  for(const [key,branch] of Object.entries(value.branches))if(!changeable.has(key as any)||typeof branch!=='string'||!/^[a-z0-9-]{1,60}$/.test(branch))throw Error('Unknown module branch.');
- return value as {start:string,branches:Record<string,string>};
+ return value as {start:string,branches:Record<string,string>,data_version?:number};
 }
 export function branchUpdates(start:string,choices:Record<string,string>,available:{sources:Record<string,ModuleSource>,options:Record<string,Record<string,ModuleSource>>}){
  if(start!=='data'&&!changeable.has(start as any))throw Error('Unknown workshop stage.');
@@ -183,7 +186,7 @@ export function branchUpdates(start:string,choices:Record<string,string>,availab
  }
  return result;
 }
-export async function runBranches(start:string,choices:Record<string,string>,request:string,submit=true){
+export async function runBranches(start:string,choices:Record<string,string>,request:string,submit=true,dataVersion?:number){
  branchUpdates(start,choices,await branches());
  await ensureBranch();
  const head=(await json('git/ref/heads/'+DEMO_BRANCH)).object.sha;
@@ -201,15 +204,41 @@ export async function runBranches(start:string,choices:Record<string,string>,req
  const tree=await (await github('git/trees','POST',{base_tree:parent.tree.sha,tree:[
   {path:'config/modules.json',mode:'100644',type:'blob',content:JSON.stringify(modules,null,2)+'\n'},
   {path:'config/stages.json',mode:'100644',type:'blob',content:JSON.stringify(settings,null,2)+'\n'},
+  ...(dataVersion===undefined?[]:[{path:'config/data.json',mode:'100644',type:'blob',content:JSON.stringify({version:dataVersion})+'\n'}]),
  ]})).json();
  const identity={name:'kyuhank',email:'kh2064@gmail.com'};
  const description=Object.entries(updates).map(([key,source])=>`${key}: ${source.branch} @ ${source.commit.slice(0,8)}`).join('; ');
  const committed=await (await github('git/commits','POST',{message:'Run module selection: '+description,tree:tree.sha,parents:[head],author:identity,committer:identity})).json();
  await github('git/refs/heads/'+DEMO_BRANCH,'PATCH',{sha:committed.sha,force:false});
- if(submit)await dispatch();
+ if(submit)await dispatch(dataVersion);
  return {stage:start,branches:updates,commit:committed.sha,url:`https://github.com/${REPO}/commit/${committed.sha}`};
 }
 export async function changeBranch(stage:string,branch:string,request:string){
  const result=await runBranches(stage,{[stage]:branch},request);
  return {...result,branch,code_source:result.branches[stage]};
+}
+
+export async function stageLog(status:any,key:string){
+ if(!changeable.has(key as any))throw Error('Unknown stage.');
+ const stage=status.stages.find((s:any)=>s.key===key),job=status.execution?.jobs?.find((j:any)=>j.id===stage?._job_id)||status.execution?.jobs?.[0];
+ const base={run_id:status.run_id,stage:key,source:'GitHub steps'};
+ if(stage?.reused)return {...base,lines:['Verified outputs restored; no runner needed.']};
+ if(!job)return {...base,lines:['Waiting for a GitHub runner.']};
+ const stamp=(date:string)=>date?date.slice(11,19):'';
+ if(job.status==='completed'&&job.conclusion!=='skipped'){
+  try{
+   const log=new TextDecoder().decode(await download(await github(`actions/jobs/${job.id}/logs`),8*1024*1024));
+   const keep=/Pulling from|Pull complete|Already exists|Digest: sha256:|Status: Downloaded|Status: Image is up to date|(?:EXTRACT|CPUE|INPUT PREPARATION|ASSESSMENT|SYNTHESIS|REPORT) complete:|REPRODUCIBILITY:|ERROR|Error:|ValueError:/;
+   let lines=log.split('\n').filter(x=>keep.test(x)&&!x.includes('##[group]')).map(x=>x.replace(/^(\S+)\s*/,(_,t)=>stamp(t)+'  ').slice(0,240));
+   if(status.execution.mode==='steps'){
+    const tags:Record<string,string>={extract:'EXTRACT complete:',cpue_vessel:'vessel_adjusted',cpue_year:'year_only',prepare_vessel:'INPUT PREPARATION complete:',prepare_year:'INPUT PREPARATION complete:',synthesis:'SYNTHESIS complete:',report:'REPORT complete:'};
+    lines=lines.filter(x=>x.includes(tags[key]||key));
+   }
+   if(lines.length)return {...base,source:'GitHub log',lines:lines.slice(-4)};
+  }catch{/* Preserve the actual step record if the downloadable log is delayed. */}
+ }
+ let steps=(job.steps||[]).filter((s:any)=>s.started_at&&s.name!=='Complete job'&&!s.name.startsWith('Post '));
+ if(status.execution.mode==='steps'&&key!=='extract')steps=steps.filter((s:any)=>s.number===stage._step_number);
+ const lines=steps.slice(-3).map((s:any)=>stamp(s.started_at)+'  '+(s.status==='in_progress'?'▶ ':s.conclusion==='success'?'✓ ':'× ')+s.name.replace('Prepare the pinned Docker environment','Start container'));
+ return {...base,lines:lines.length?lines:['Waiting for dependency outputs.']};
 }

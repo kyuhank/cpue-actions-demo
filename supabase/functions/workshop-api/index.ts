@@ -1,4 +1,4 @@
-import {parseSelection,branchUpdates,runBranches,changeBranch,branches,change,changeable,current,consoleLines,output,outputStage,outputNames,stageOutputs,ensureBranch} from './github.ts';
+import {parseSelection,branchUpdates,runBranches,changeBranch,branches,change,changeable,current,consoleLines,stageLog,output,outputStage,outputNames,stageOutputs,ensureBranch} from './github.ts';
 import {rpc,cached,invalidate} from './database.ts';
 import {maintain,observe,pendingUpdate} from './lifecycle.ts';
 import batches from './batches.json' with {type:'json'};
@@ -7,6 +7,7 @@ const reply=(value:unknown,status=200)=>Response.json(value,{status,headers:cors
 const enabled=()=>/^github_pat_[A-Za-z0-9_]+$/.test(Deno.env.get('WORKSHOP_GITHUB_TOKEN')||'')&&Deno.env.get('WORKSHOP_ZERO_BUDGET_CONFIRMED')==='true';
 async function status(){
  const s:any=await cached('status',Deno.env.get('WORKSHOP_GITHUB_TOKEN')?2:300,current),limits=await rpc('workshop_state');
+ const database=await cached('database:current',10,()=>rpc('cpue_snapshot',{p_version:null}));
  const pending=pendingUpdate(limits,s),demo=enabled()?await observe(s,limits):await rpc('workshop_demo_state');
  const can=enabled()&&demo.phase!=='cleaning'&&!pending&&limits.remaining>0&&(!limits.next_update||Date.parse(limits.next_update)<=Date.now())&&s.status==='completed';
  const record=limits.last_request;let intake=record?.result?.quality_check?{quality_check:record.result.quality_check,published:record.result.published,checked_at:Date.parse(record.created_at)/1000}:null;
@@ -17,7 +18,7 @@ async function status(){
   }catch{/* The run state remains available while the report is being published. */}
  }
  if(!s.has_run)intake=null;
- return {...s,demo,database_connected:true,data_intake:intake,session:{can_update:can,remaining:limits.remaining,next_update:limits.next_update,message:!enabled()?'Cloud execution is awaiting the owner’s restricted GitHub connection.':demo.phase==='cleaning'?'Resetting the demonstration. The next run will start from the baseline.':pending?'The update is stored; waiting for GitHub to acknowledge the next run.':limits.remaining===0?'Daily limit reached. You can still inspect the current run.':!can?'Wait for the current run and the short update interval.':`${limits.remaining} shared updates available today.`}};
+ return {...s,demo,data_versions:database.version>=2024?[2023,2024]:[2023],latest_database_version:database.version,database_connected:true,data_intake:intake,session:{can_update:can,remaining:limits.remaining,next_update:limits.next_update,message:!enabled()?'Cloud execution is awaiting the owner’s restricted GitHub connection.':demo.phase==='cleaning'?'Resetting the demonstration. The next run will start from the baseline.':pending?'The update is stored; waiting for GitHub to acknowledge the next run.':limits.remaining===0?'Daily limit reached. You can still inspect the current run.':!can?'Wait for the current run and the short update interval.':`${limits.remaining} shared updates available today.`}};
 }
 export async function handle(request:Request){
  if(request.method==='OPTIONS')return new Response(null,{status:204,headers:cors});
@@ -43,6 +44,10 @@ export async function handle(request:Request){
     return reply({provider:'Supabase · PostgreSQL',current_version:latest.version,snapshot});
    }
 
+   if(path==='/api/stage-log'){
+    const key=u.searchParams.get('stage')||'';if([...u.searchParams.keys()].some(k=>k!=='stage')||!changeable.has(key as any))return reply({detail:'Unknown stage.'},400);
+    const s=await status();return reply(await cached('stage-log:'+s.run_id+':'+s.attempt+':'+key,s.status==='completed'?600:2,()=>stageLog(s,key)));
+   }
    if(path==='/api/console'){const s=await status();if(!s.ready)return reply({ready:false,lines:[]});return reply(await cached('console:'+s.run_id+':'+s.attempt,3600,()=>consoleLines(s)));}
    if(path==='/api/output'||path==='/api/outputs'){
     const source=u.searchParams.get('job')||'',file=u.searchParams.get('file')||'';
@@ -61,7 +66,7 @@ export async function handle(request:Request){
   let kind=branchMatch?branchMatch[1]:path==='/api/update'?'data':path==='/api/check-invalid-data'?'invalid':path.startsWith('/api/change/')?path.slice('/api/change/'.length):'';
   if(!combined&&!['data','invalid'].includes(kind)&&!changeable.has(kind as any))return reply({detail:'Unknown workshop action.'},404);
   if(u.search||request.headers.get('X-Workshop-Action')!=='publish-synthetic-data'||!request.headers.get('Content-Type')?.startsWith('application/json'))return reply({detail:'Use the workshop controls.'},400);
-  const text=await request.text();let selection:{start:string,branches:Record<string,string>}|null=null;
+  const text=await request.text();let selection:{start:string,branches:Record<string,string>,data_version?:number}|null=null;
   if(combined){try{selection=parseSelection(text);kind=selection.start;}catch{return reply({detail:'Choose a stage and registered branches only.'},400);}}
   else if(text.length>64||text.trim()!=='{}')return reply({detail:'Only fixed demonstration actions are accepted.'},400);
   const id=request.headers.get('X-Workshop-Request')||'';if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id))return reply({detail:'A request identifier is required.'},400);
@@ -70,17 +75,22 @@ export async function handle(request:Request){
   // Check GitHub directly before any data or settings mutation.
   const s:any=await current();if(!s.ready||s.status!=='completed')return reply({detail:'Wait for the current workflow to finish before updating.'},409);
   const control=await rpc('workshop_state');if(pendingUpdate(control,s))return reply({detail:'An earlier update is waiting for GitHub. Inspect its request before submitting another.'},409);
+  if(selection?.data_version!==undefined){const latest=await rpc('cpue_snapshot',{p_version:null});if(selection.data_version>latest.version)return reply({detail:'Publish the checked data batch before selecting this release.'},400);}
   let claim;try{claim=await rpc('workshop_reserve',{p_id:id,p_kind:kind});}catch{return reply({detail:'Another update is pending, the 30-second interval has not passed, or today’s 60 updates are used.'},429);}
   if(claim.duplicate)return reply(claim.result||{detail:'This request is already being processed.'},claim.result?200:409);
   let result:any;
   try{
-   if(kind==='data'||kind==='invalid'){
+   if(selection?.data_version!==undefined){
+    await rpc('workshop_demo_start',{p_request:id});
+    const start=kind==='data'||selection.data_version!==s.database_version?'extract':kind;
+    result={...await runBranches(start,selection.branches,id,true,selection.data_version),database_version:selection.data_version,published:true};
+   }else if(kind==='data'||kind==='invalid'){
     const snapshot=await rpc('cpue_snapshot',{p_version:null}),year=2024;
     if(kind==='data'&&snapshot.version>=year){
      // One added batch only. A replay recalculates the already accepted release.
      if(snapshot.version!==year)throw Error('Reset the demonstration before replaying its fixed data update.');
      await rpc('workshop_demo_start',{p_request:id});
-     const replay=await runBranches('extract',selection?.branches||{},id);
+     const replay=await runBranches('extract',selection?.branches||{},id,true,year);
      result={...replay,replayed:true,published:true,year,database_version:year};
     }else{
      const batch=structuredClone((batches as any)[year]);
@@ -89,7 +99,7 @@ export async function handle(request:Request){
      if(!quality.accepted)result={quality_check:quality,published:false};
      else{
       await rpc('workshop_demo_start',{p_request:id});await ensureBranch();
-      if(selection)await runBranches('data',selection.branches,id,false);
+      await runBranches('extract',selection?.branches||{},id,false,year);
       const released=await rpc('cpue_append_year',{p_year:year,p_sets:batch.sets,p_catch:batch.catch});
       result={...released,quality_check:released.quality_check,published:true,year,database_version:released.version};
      }

@@ -65,7 +65,7 @@ begin
  alter table public.cpue_releases enable trigger cpue_releases_immutable;
  delete from workshop_private.cloud_dispatches where version>=2023;
  delete from workshop_private.cloud_cache
-   where key in ('status','branches') or key like 'database:%' or key like 'console:%' or key like 'output:%';
+   where key in ('status','branches') or key like 'database:%' or key like 'console:%' or key like 'stage-log:%' or key like 'output:%';
  -- Retain today's request counters so resetting cannot bypass the daily limit.
  delete from workshop_private.cloud_requests where created_at<date_trunc('day',now());
  update workshop_private.cloud_demo set phase='idle',run_id=null,reset_at=null,cleanup_until=null,

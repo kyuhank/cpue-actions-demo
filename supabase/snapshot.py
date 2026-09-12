@@ -58,6 +58,9 @@ def materialise(snapshot, target):
 
 if __name__ == '__main__':
     version = os.getenv('TOY_DATABASE_VERSION', '')
+    selection = Path(os.getenv('TOY_STAGE_CONFIG', 'config/stages.json')).with_name('data.json')
+    if not version and selection.exists():
+        version = str(json.loads(selection.read_text())['version'])
     if version and not re.fullmatch(r'20\d{2}', version):
         raise SystemExit('Invalid database version')
     snapshot = rpc(os.environ['SUPABASE_URL'], os.environ['SUPABASE_ANON_KEY'], 'cpue_snapshot', {'p_version': int(version) if version else None})

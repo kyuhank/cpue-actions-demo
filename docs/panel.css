@@ -114,3 +114,21 @@
 #preview-execution{display:block;border:0;background:none;color:#0085ca;font-size:11px;margin-top:8px;padding:0}
 .record[data-phase=limited]{background:#fff5e1;border-left-color:#bc8831}
 #quota{font-size:10px;font-weight:normal;white-space:nowrap;color:#587483}
+
+/* Saved inputs remain stationary; gold is reserved for the work running now. */
+.stage .input-note{display:none}
+.stage.using-saved .input-note{display:block;font-size:10px;line-height:1.2;margin-top:4px;color:#946012}
+.stage.using-saved small{margin-top:4px}
+.stage.using-saved .output-note{display:none}
+.stage.using-saved[data-key^=cpue_]:not([data-key=cpue_summary]){height:76px;min-height:76px;padding-top:8px;padding-bottom:8px}
+.stage.using-saved[data-key=cpue_report]{height:66px;min-height:66px;padding:7px}
+.stage.using-saved[data-key^=assessment_]{min-height:72px;padding-top:8px;padding-bottom:8px}
+.chain .stage.saved-feeder,.chain.executing .stage.saved-feeder:not(.running){opacity:.9;border:1px dashed #8098a6;background:#f3f7f9;box-shadow:none;animation:none}
+.chain .stage.saved-feeder strong,.chain .stage.saved-feeder small{color:#536f80}
+.chain .edges>path.saved-feed,.chain.executing .edges>path.saved-feed{stroke:#8098a6;stroke-width:1.5;stroke-dasharray:3 4;opacity:.85;animation:none}
+.record .input-transfer{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.record .input-transfer .saved-caption{color:#536f80;font-size:12px}
+.record .input-transfer .transfer-arrow{color:#b77b1c;font-size:20px;line-height:1}
+.record .input-transfer strong{color:#946012;font-size:13px}
+.record .input-context{display:block;font-size:11px;font-weight:normal;color:#536f80;margin-top:3px}
+.record:has(.input-transfer){padding-top:6px;padding-bottom:6px}

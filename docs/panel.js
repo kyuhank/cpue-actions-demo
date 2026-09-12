@@ -27,6 +27,21 @@ function plannedRoots(){
  const ancestors=key=>{const found=new Set(),todo=[...(stages.get(key)?.parents||[])];while(todo.length){const parent=todo.pop();if(found.has(parent))continue;found.add(parent);todo.push(...(stages.get(parent)?.parents||[]));}return found;};
  return roots.filter(key=>!roots.some(other=>other!==key&&ancestors(key).has(other)));
 }
+function savedInputTransfers(){
+ // Only verified reuse in the current execution counts. A selection or an old
+ // completed run must never imply that the new run has restored its inputs.
+ if(!data?.has_run||sending||expected||pendingRun||data.status==='completed')return [];
+ const stages=new Map(data.stages.map(s=>[s.key,s]));
+ return data.stages.filter(s=>s.status==='running'&&!s.reused).flatMap(stage=>{
+  const saved=(stage.parents||[]).map(k=>stages.get(k)).filter(s=>s?.reused&&s.status==='completed');
+  return saved.length?[{stage,saved,mixed:saved.length<stage.parents.length}]:[];
+ });
+}
+function inputLabel(key){
+ if(key==='cpue_vessel')return 'CPUE A';if(key==='cpue_year')return 'CPUE B';
+ if(key.startsWith('prepare_')||key.startsWith('assessment_'))return names[key]+' ('+(key.includes('vessel')?'A':'B')+')';
+ return names[key];
+}
 function nextSource(key){if(['submission','qc','ingest'].includes(key))return data?.intake_stages?.find(s=>s.key===key)?.code_source||branchCatalog?.intakeSource;return branchCatalog?.options[key]?.[branchDrafts[key]||branchCatalog?.sources[key]?.branch]||data?.stages.find(s=>s.key===key)?.code_source;}
 function sourceLink(key){
  const link=node(key).querySelector('.source-link'),source=nextSource(key);
@@ -45,6 +60,7 @@ function node(key){
  else{const state=document.createElement('small');state.innerHTML='<span class="state-icon"></span><span class="state-label"></span>';if(['cpue_vessel','cpue_year'].includes(key)){const variant=document.createElement('span');variant.className='analysis-variant';variant.textContent=key==='cpue_vessel'?'A':'B';state.prepend(variant);}control.append(state);if(['cpue_summary','synthesis'].includes(key)){const output=document.createElement('span');output.className='output-note';output.textContent='Plots + tables';control.append(output);}}
  const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.target='_blank';link.rel='noopener';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource(key);};
  if(key==='data'){const shell=document.createElementNS('http://www.w3.org/2000/svg','svg');shell.setAttribute('viewBox','0 0 140 100');shell.setAttribute('preserveAspectRatio','none');shell.setAttribute('aria-hidden','true');shell.classList.add('database-shell');shell.innerHTML='<path class=database-body d="M1 12V87C1 103 139 103 139 87V12"/><ellipse cx=70 cy=12 rx=69 ry=11 /><path class=record-lines d="M38 76H112M38 84H112M38 92H112M65 73V95M88 73V95"/><path class=record-keys d="M27 74h5v4h-5zM27 82h5v4h-5zM27 90h5v4h-5z"/>';el.append(shell);}
+ if(key!=='data'){const note=document.createElement('span');note.className='input-note';note.textContent='Saved inputs';control.append(note);}
  el.append(control,link);el.onclick=()=>{selected=key;if(key==='data')dataDraft=String(data?.database_version||2023);draw();showPreview(key);};
 
  $('chain').append(el);return el;
@@ -263,6 +279,10 @@ function links(){
   const returned=document.createElementNS(ns,'path');returned.classList.add('return-edge');returned.classList.toggle('corrected-return',correction==='corrected');returned.classList.toggle('returning',correction==='returned');returned.classList.toggle('active',correction==='resubmitting');returned.classList.toggle('return-history',['rechecking','corrected'].includes(correction));returned.classList.toggle('muted',!!selected&&!impact.has('data'));returned.dataset.from='qc';returned.dataset.to='submission';returned.setAttribute('d',roundedRoute([[x,y],[rail,y],[rail,Y],[X,Y]]));returned.setAttribute('marker-end','url(#arrow-'+(correction==='resubmitting'?'active':correction==='corrected'?'corrected':'failed')+')');const label=document.createElementNS(ns,'title');label.textContent=correction==='corrected'?'Initial QC failed; corrected example resubmitted; recheck passed.':'QC returned the example for correction and resubmission.';returned.append(label);svg.append(returned);
  }
  if(root.classList.contains('executing'))for(const path of svg.querySelectorAll(':scope > path:not(.active):not(.returning)'))if(path.hasAttribute('marker-end'))path.setAttribute('marker-end','url(#arrow-muted)');
+ for(const {stage,saved} of savedInputTransfers())for(const input of saved){
+  const path=svg.querySelector(`path[data-from="${input.key}"][data-to="${stage.key}"]`);if(!path)continue;
+  path.classList.add('saved-feed');path.classList.remove('active','preview');path.setAttribute('marker-end','url(#arrow-base)');
+ }
  root.append(svg);
 }
 new ResizeObserver(()=>requestAnimationFrame(()=>{links();if(previewKey)showPreview(previewKey);if($('sql-view').open)placePopup($('sql-view'),node('extract'));})).observe($('chain'));
@@ -296,7 +316,14 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  if(cloudBlocked&&!busy&&!stale){$('message').textContent=data.session.message.includes('owner')?'Viewing only · owner GitHub connection needed':data.session.message;$('message').className='read-only';}
  if(data.intake_stages?.some(j=>j.correction_phase==='resubmitting')){$('message').textContent='QC returned the example → provider correction and resubmission';}else if(data.intake_stages?.some(j=>j.correction_phase==='rechecking')){$('message').textContent='Corrected example submitted → checking again';}
  if(qc&&!qc.accepted&&!busy){$('message').textContent='QC failed on GitHub · returned to Korea · loading and extraction blocked';}
- narrate();if(cloudBlocked&&!busy&&!stale&&data.session.next_update){const wait=Math.max(0,Math.ceil((Date.parse(data.session.next_update)-Date.now())/1000));if(wait){$('run').textContent='Run again in '+wait+' s';$('message').textContent='Run complete. The next run is available in '+wait+' seconds.';}else if(data.session.remaining>0&&data.demo?.phase!=='cleaning'&&!data.session.message.includes('owner')){$('run').textContent='Confirming completion…';$('message').textContent='All selected jobs have finished. Confirming the run record…';}}drawQuota(busy);drawQuality();drawCpueProducts();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
+ drawSavedInputs();narrate();if(cloudBlocked&&!busy&&!stale&&data.session.next_update){const wait=Math.max(0,Math.ceil((Date.parse(data.session.next_update)-Date.now())/1000));if(wait){$('run').textContent='Run again in '+wait+' s';$('message').textContent='Run complete. The next run is available in '+wait+' seconds.';}else if(data.session.remaining>0&&data.demo?.phase!=='cleaning'&&!data.session.message.includes('owner')){$('run').textContent='Confirming completion…';$('message').textContent='All selected jobs have finished. Confirming the run record…';}}drawQuota(busy);drawQuality();drawCpueProducts();requestAnimationFrame(links);showConsole();loadConsole();if(previewKey)showPreview(previewKey);}
+function drawSavedInputs(){
+ for(const el of $('chain').querySelectorAll('.saved-feeder,.using-saved'))el.classList.remove('saved-feeder','using-saved');
+ for(const {stage,saved,mixed} of savedInputTransfers()){
+  const target=node(stage.key);target.classList.add('using-saved');target.querySelector('.input-note').textContent=mixed?'Saved + new inputs':'Saved inputs';
+  for(const input of saved){const source=node(input.key);source.classList.add('saved-feeder');source.querySelector('.state-label').textContent='Saved';source.title='Saved output · retained unchanged; used by '+inputLabel(stage.key);}
+ }
+}
 function drawQuota(busy){
  const session=data.session||{},remaining=session.remaining;
  $('quota').hidden=busy||!Number.isFinite(remaining)||remaining<=0;
@@ -312,7 +339,7 @@ function drawQuota(busy){
 function narrate(){
  const record=document.querySelector('.record'),qcJob=data.intake_stages?.find(j=>j.key==='qc'),phase=qcJob?.correction_phase;
  const running=data.stages.filter(s=>s.status==='running'),intake=data.intake_stages?.find(j=>j.status==='running'&&!j.skipped);
- const setup=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]).find(s=>s.status==='in_progress'),setupMessage=({'Set up job':'Runner assigned. Initialising the job.','Checkout':'Runner ready. Retrieving the analysis code.','Checkout source data':'Retrieving the selected data and configuration commit.','Prepare code and container':'Preparing the container and checking the selected module versions.','Start analysis container':'Starting the analysis container.','Fetch versioned database snapshot':'Verifying the selected data snapshot.','Restore and verify reusable outputs':'Verifying saved upstream outputs for reuse.'})[setup?.name];
+ const setup=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]).find(s=>s.status==='in_progress'),setupMessage=({'Set up job':'Runner assigned. Initialising the job.','Checkout':'Runner ready. Retrieving the analysis code.','Checkout source data':'Retrieving the selected data and configuration commit.','Prepare code and container':'Preparing the container and checking the selected module versions.','Start analysis container':'Starting the analysis container.','Fetch versioned database snapshot':'Verifying the selected data snapshot.','Restore and verify reusable outputs':'Checking inputs and the execution plan.'})[setup?.name];
  const labels={submission:'Submitting example records for quality checks.',qc:'Checking the submitted records before they enter the database.',ingest:phase==='corrected'?'QC failed → example resubmitted → recheck passed. Loading the accepted records.':'QC passed. Preparing and loading the accepted records.',extract:'Extracting the selected records from the database.',cpue_vessel:'Standardising CPUE using analysis A.',cpue_year:'Standardising CPUE using analysis B.',cpue_summary:'Comparing the CPUE analyses and preparing plots and tables.',cpue_report:'Writing the combined CPUE report.',prepare_vessel:'Combining CPUE A with other assessment inputs.',prepare_year:'Combining CPUE B with other assessment inputs.',synthesis:'Combining assessment results into plots and comparison tables.',report:'Writing the assessment report and saving its analysis record.'};
  record.dataset.phase=data.status==='completed'?'complete':'running';
  if(data.source?.stale||(!sending&&!expected&&data.session&&!data.session.can_update&&data.status==='completed'))return;
@@ -334,6 +361,17 @@ function narrate(){
  else if(data.conclusion==='success'){const ran=data.stages.filter(s=>!s.reused).length+(data.intake_stages||[]).filter(s=>!s.skipped).length;message=phase==='corrected'?'QC failed → corrected → passed. '+ran+' jobs completed. Open a job to inspect its outputs.':ran+' jobs completed. Open a job to inspect its outputs.';}
  else{const failed=[...(data.intake_stages||[]),...data.stages].find(s=>s.status==='failed');message=(failed?({submission:'Data submission',qc:'QC',ingest:'Prepare & load'}[failed.key]||names[failed.key])+' stopped. ':'The workflow stopped. ')+'Open its job record to inspect the reason.';record.dataset.phase='failed';}
  if(message)$('message').textContent=message;
+ const transfers=savedInputTransfers();
+ if(transfers.length&&!intake&&!data.source?.stale){
+  const saved=[...new Set(transfers.flatMap(t=>t.saved.map(s=>inputLabel(s.key))))],targets=[...new Set(transfers.map(t=>inputLabel(t.stage.key)))];
+  const line=document.createElement('span');line.className='input-transfer';
+  const caption=document.createElement('span');caption.className='saved-caption';caption.textContent=transfers.some(t=>t.mixed)?'Saved + new outputs':'Saved outputs';
+  const arrow=document.createElement('span');arrow.className='transfer-arrow';arrow.textContent='→';
+  const target=document.createElement('strong');target.textContent=targets.join(' + ');
+  line.append(caption,arrow,target);
+  const context=document.createElement('span');context.className='input-context';context.textContent=saved.join(' + ')+' · reused unchanged.';
+  $('message').replaceChildren(line,context);
+ }
  if(data.demo?.reset_at&&data.status==='completed'){const sec=Math.max(0,Math.ceil((Date.parse(data.demo.reset_at)-Date.now())/1000));$('verified').textContent='Resets in '+Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');}
 }
 // Merge only observations of the same run; an older cached response cannot rewind it.

@@ -45,6 +45,7 @@ create or replace function public.workshop_state() returns jsonb
 language sql stable security definer set search_path='' as $$
  select jsonb_build_object('remaining', greatest(0,60-(select count(*) from workshop_private.cloud_requests where created_at>=date_trunc('day',now()))),
  'next_update', (select max(created_at)+interval '30 seconds' from workshop_private.cloud_requests),
+ 'last_reset_at',(select last_reset_at from workshop_private.cloud_demo where id),
  'last_request', (select jsonb_build_object('kind',kind,'created_at',created_at,'result',result) from workshop_private.cloud_requests order by created_at desc limit 1));
 $$;
 create or replace function public.workshop_cache_get(p_key text) returns jsonb

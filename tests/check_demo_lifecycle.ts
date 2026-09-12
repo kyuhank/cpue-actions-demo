@@ -1,5 +1,5 @@
 import {change,definitions,REPO,DEMO_BRANCH,emptyRun} from '../supabase/functions/workshop-api/github.ts';
-import {maintain} from '../supabase/functions/workshop-api/lifecycle.ts';
+import {maintain,pendingUpdate} from '../supabase/functions/workshop-api/lifecycle.ts';
 import {handle} from '../supabase/functions/workshop-api/index.ts';
 const assert=(ok:unknown,message='Assertion failed')=>{if(!ok)throw Error(message);};
 
@@ -77,3 +77,5 @@ Deno.test('Anonymous callers cannot invoke cleanup, even when normal guest execu
   assert((await handle(new Request(url,{method:'POST',headers:{'X-Workshop-Webhook':'wrong'}}))).status===403);
  }finally{for(const key of ['WORKSHOP_GITHUB_TOKEN','WORKSHOP_ZERO_BUDGET_CONFIRMED','WORKSHOP_WEBHOOK_SECRET'])Deno.env.delete(key);}
 });
+
+Deno.test('Cleanup clears a pending request whose previous run was the empty baseline',()=>{assert(!pendingUpdate({last_reset_at:'2026-09-12T01:00:00Z',last_request:{created_at:'2026-09-12T00:00:00Z',result:{previous_run:null,published:true}}},emptyRun()));});

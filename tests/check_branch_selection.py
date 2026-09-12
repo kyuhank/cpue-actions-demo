@@ -35,7 +35,7 @@ with tempfile.TemporaryDirectory(prefix='cpue-selected-branch-') as directory:
     assert sources['cpue_vessel']['specification']['min_hooks'] == 2000
     call('scripts/workflow_plan.py', 'previous')
     changed = json.loads((root / 'stages/_plan.json').read_text())
-    expected = {'cpue_vessel', 'prepare_vessel', 'assessment_vessel_ref', 'assessment_vessel_high_m', 'synthesis', 'report'}
+    expected = {'cpue_summary', 'cpue_report', 'cpue_vessel', 'prepare_vessel', 'assessment_vessel_ref', 'assessment_vessel_high_m', 'synthesis', 'report'}
     assert {key for key, stage in changed['stages'].items() if stage['action'] == 'run'} == expected
     for key in changed['stages']:
         if key in expected: call('scripts/run_stage.py', key)
@@ -75,4 +75,4 @@ with tempfile.TemporaryDirectory(prefix='cpue-selected-branch-') as directory:
         (root/'config/modules.json').write_text(json.dumps(invalid))
         r = subprocess.run([sys.executable, 'scripts/resolve_modules.py'], cwd=root, env=env, capture_output=True)
         assert r.returncode != 0
-print('Selected development code changes CPUE results; only six dependent stages run. Repeated requests rerun the same fixed code. Unknown branches and source overrides are rejected.')
+print('Selected development code changes CPUE results; only the affected analysis and reporting stages run. Repeated requests rerun the same fixed code. Unknown branches and source overrides are rejected.')

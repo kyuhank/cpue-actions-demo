@@ -42,8 +42,8 @@ with tempfile.TemporaryDirectory(prefix='cpue-baseline-check-') as folder:
     assert report['github_run_id']=='new-run' and report['extraction_run_id']=='baseline-2023'
     assert report['git_commit']=='b'*40 and report['extraction_code_commit']==metadata['code_commit']
     p=plan({'cpue_vessel':{'min_hooks':2000}})
-    assert sum(v['action']=='run' for v in p['stages'].values())==6
+    assert sum(v['action']=='run' for v in p['stages'].values())==8
     with (root/'pipeline/settings.py').open('a') as f:f.write('\n# Changed shared calculation code\n')
     p=plan({})
     assert all(v['action']=='run' for v in p['stages'].values())
-print('Fresh starts: input preparation 5 run / 6 baseline; CPUE 6 / 5. Parallel assessments overlap; changed calculation code invalidates reuse.')
+print('Fresh starts: input preparation 5 run / 8 baseline; CPUE 8 / 5. Parallel assessments overlap; changed calculation code invalidates reuse.')

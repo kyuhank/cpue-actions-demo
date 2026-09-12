@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix='cpue-incremental-') as folder:
             if record['action'] == 'run':
                 subprocess.run([sys.executable, 'scripts/run_stage.py', key], cwd=root, env=env, check=True, stdout=subprocess.DEVNULL)
         return {k for k, v in plan['stages'].items() if v['action'] == 'run'}
-    assert len(execute()) == 11
+    assert len(execute()) == 13
     baseline_plan=json.loads((root/'stages/_plan.json').read_text())
     assert baseline_plan['stages']['prepare_vessel']['parents']==['extract','cpue_vessel']
     assert baseline_plan['stages']['report']['parents']==['synthesis']
@@ -37,7 +37,7 @@ with tempfile.TemporaryDirectory(prefix='cpue-incremental-') as folder:
     config.write_text(json.dumps({'cpue_vessel': {'min_hooks': 2000}}))
     env['GITHUB_RUN_ID'] = '2'
     env['TOY_DATA_COMMIT'] = 'c'*40
-    assert execute(first) == {'cpue_vessel', 'prepare_vessel', 'assessment_vessel_ref', 'assessment_vessel_high_m', 'synthesis', 'report'}
+    assert execute(first) == {'cpue_summary', 'cpue_report', 'cpue_vessel', 'prepare_vessel', 'assessment_vessel_ref', 'assessment_vessel_high_m', 'synthesis', 'report'}
     for key in ('extract', 'cpue_year', 'prepare_year', 'assessment_year_ref', 'assessment_year_high_m'):
         for path in (first / key).rglob('*'):
             if path.is_file():
@@ -61,7 +61,7 @@ with tempfile.TemporaryDirectory(prefix='cpue-incremental-') as folder:
     config.write_text(json.dumps({'cpue_vessel': {'min_hooks': 2000}, 'assessment_vessel_high_m': {'M': .35}}))
     env['GITHUB_RUN_ID'] = '3'
     assert execute(second) == {'assessment_vessel_high_m', 'synthesis', 'report'}
-    assert '3 stages executed · 8 reused' in (root / 'stages/report/outputs/report.html').read_text()
+    assert '3 stages executed · 10 reused' in (root / 'stages/report/outputs/report.html').read_text()
     # Rerunning preparation retains extraction, both CPUE fits and the other branch.
     third = root / 'third'; (root / 'stages').rename(third)
     settings = json.loads(config.read_text()); settings['prepare_vessel'] = {'revision': 1}
@@ -77,10 +77,10 @@ with tempfile.TemporaryDirectory(prefix='cpue-incremental-') as folder:
     assert report_manifest['extraction_run_id'] == '1'
     assert report_manifest['configuration']['stage_settings']['report'] == {'revision': 1}
     assert report_manifest['workflow_plan']['run_id'] == '5'
-    assert '1 stages executed · 10 reused' in (root / 'stages/report/outputs/report.html').read_text()
+    assert '1 stages executed · 12 reused' in (root / 'stages/report/outputs/report.html').read_text()
     third = root / 'before-data-change'; (root / 'stages').rename(third)
     import sqlite3
     with sqlite3.connect(root / 'data/toy-fishery.sqlite') as db:
         db.execute('UPDATE sets SET catch_n=catch_n+1 WHERE rowid=1')
-    assert len(execute(third)) == 11
-print('Verified: CPUE 6 stages, assessment 3, data 11. Reused outputs are byte-identical; data release, code and current settings commits, original extraction run, SQL files and snapshot are preserved together.')
+    assert len(execute(third)) == 13
+print('Verified: CPUE 8 stages, assessment 3, data 13. Reused outputs are byte-identical; data release, code and current settings commits, original extraction run, SQL files and snapshot are preserved together.')

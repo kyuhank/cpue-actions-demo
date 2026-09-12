@@ -39,7 +39,7 @@ os.chdir(work)
 os.environ['GITHUB_JOB'] = key
 os.environ['TOY_CPUE_CHOICE'] = ('vessel_adjusted' if key.endswith('_vessel') else 'year_only') if key.startswith(('cpue_', 'prepare_')) else ''
 os.environ['TOY_ASSESSMENT_CASE'] = key if key.startswith('assessment_') else ''
-stage = ('cpue' if key.startswith('cpue_') else 'prepare_inputs' if key.startswith('prepare_') else 'assessment' if key.startswith('assessment_') else key)
+stage = ('cpue' if key in ('cpue_vessel','cpue_year') else 'prepare_inputs' if key.startswith('prepare_') else 'assessment' if key.startswith('assessment_') else key)
 code_source = module_sources().get(key, {})
 if key.startswith('cpue_') and code_source.get('specification', {}).get('choice'):
     os.environ['TOY_CPUE_CHOICE'] = code_source['specification']['choice']
@@ -52,7 +52,7 @@ if key in ('cpue_summary','cpue_report'):
     manifest['cpue_reporting']={**manifest.get('cpue_reporting',{}),key:{'code_source':code_source,'run_id':os.getenv('GITHUB_RUN_ID','local'),'container':os.getenv('TOY_CONTAINER_IMAGE','local')}}
     target.write_text(json.dumps(manifest,indent=2)+'\n')
     if key=='cpue_report':
-        runpy.run_path(str(ROOT/'pipeline'/code_source['entrypoint']),run_name='__main__')
+        runpy.run_path(str(ROOT/'pipeline'/code_source.get('entrypoint',stage+'.py')),run_name='__main__')
 if key not in ('report','cpue_report'):
     runpy.run_path(str(ROOT / 'pipeline/stage_html.py'))['build'](key, work / 'outputs', code_source)
 compute_seconds = time.perf_counter() - started

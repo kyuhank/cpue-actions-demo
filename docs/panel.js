@@ -341,6 +341,8 @@ function observeRun(next){
  if(pendingRun){
   if(!next.has_run||Number(next.run_id)<=Number(pendingRun.previous||0))return false;
   if(pendingRun.run_id&&String(next.run_id)!==String(pendingRun.run_id))return false;
+  // GitHub may expose the old launcher head before its dispatch title is ready.
+  if(expected&&next.source_commit_confirmed===false)return false;
   if(expected&&next.commit!==expected){
    if(!pendingRun.run_id)return false;
    notice('The runner did not confirm the selected code version. Inspect the run record before trying again.');
@@ -349,6 +351,7 @@ function observeRun(next){
  }
  if(data?.run_id&&next.run_id&&Number(next.run_id)<Number(data.run_id))return false;
  if(data?.run_id===next.run_id&&data?.attempt===next.attempt){
+  if(data.source_commit_confirmed===true&&next.source_commit_confirmed===false)return false;
   const rank={waiting:0,idle:0,not_requested:2,running:1,completed:2,failed:2,blocked:2,cancelled:2};
   const merge=(old,value)=>({...old,...value,...((rank[old?.status]||0)>(rank[value.status]||0)?{status:old.status,reused:old.reused}:{}),code_source:value.code_source||old?.code_source});
   next.stages=next.stages.map(value=>merge(data.stages.find(s=>s.key===value.key),value));

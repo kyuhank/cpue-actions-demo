@@ -4,6 +4,7 @@ export const DEMO_BRANCH = 'demo-runtime';
 // A dispatch can resolve a recently updated branch to its previous head.
 // The workflow checks out this explicit input; keep it distinct from the launcher SHA.
 export function sourceCommit(run:any):string{return /^Workshop · ([a-f0-9]{40})$/.exec(run.display_title||'')?.[1]||run.head_sha;}
+export function sourceCommitConfirmed(run:any):boolean{return /^Workshop · [a-f0-9]{40}$/.test(run.display_title||'')||run.event==='push';}
 export const definitions = [
  ['extract','01 Extract',[]], ['cpue_vessel','02 CPUE: year + vessel',['extract']],
  ['cpue_year','02 CPUE: year only',['extract']],
@@ -87,7 +88,7 @@ export function mapRun(run:any,jobs:any[]){
  });
  const databaseStep=steps.find((s:any)=>s.name==='Fetch versioned database snapshot');
  const database_stage={status:databaseStep?.status==='in_progress'?'running':databaseStep?.conclusion==='success'?'completed':databaseStep?.conclusion==='failure'?'failed':'waiting',started_at:databaseStep?.started_at,completed_at:databaseStep?.completed_at};
- return {ready:true,has_run:true,stages,intake_stages,database_stage,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:sourceCommit(run),workflow_commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
+ return {ready:true,has_run:true,stages,intake_stages,database_stage,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:sourceCommit(run),source_commit_confirmed:sourceCommitConfirmed(run),workflow_commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
  trigger_message:run.display_title.startsWith('Database version ')?run.display_title:(run.head_commit?.message||run.display_title).split('\n')[0].slice(0,160),database_version:/^Database version 20\d{2}$/.test(run.display_title)?Number(run.display_title.slice(-4)):null,
  execution:{mode:distributed?'module_jobs':grouped?'grouped_steps':'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};
 }

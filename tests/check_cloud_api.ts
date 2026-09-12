@@ -2,6 +2,13 @@ import {handle} from '../supabase/functions/workshop-api/index.ts';
 import {mapRun,definitions} from '../supabase/functions/workshop-api/github.ts';
 const equal=(a:unknown,b:unknown)=>{if(JSON.stringify(a)!==JSON.stringify(b))throw Error(JSON.stringify({a,b}));};
 const endpoint='https://example.supabase.co/functions/v1/workshop-api';
+Deno.test('An early dispatch response cannot confirm its launcher head as the analysis source',()=>{
+ const run={id:119,run_attempt:1,run_number:119,event:'workflow_dispatch',head_sha:'a'.repeat(40),status:'queued',display_title:'New data to report'};
+ equal(mapRun(run,[]).source_commit_confirmed,false);
+ const confirmed=mapRun({...run,display_title:'Workshop · '+'b'.repeat(40)},[]);
+ equal(confirmed.source_commit_confirmed,true);equal(confirmed.commit,'b'.repeat(40));equal(confirmed.workflow_commit,'a'.repeat(40));
+ equal(mapRun({...run,event:'push'},[]).source_commit_confirmed,true);
+});
 Deno.test('Unconfigured cloud cannot publish; paths, fields and request identities are bounded',async()=>{
  Deno.env.delete('WORKSHOP_GITHUB_TOKEN');Deno.env.delete('WORKSHOP_ZERO_BUDGET_CONFIRMED');
  equal((await handle(new Request(endpoint+'/api/presentation-info'))).status,200);

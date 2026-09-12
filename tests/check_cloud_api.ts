@@ -16,6 +16,8 @@ Deno.test('Unconfigured cloud cannot publish; paths, fields and request identiti
  equal((await handle(req())).status,503); // A token alone cannot bypass the no-charge prerequisite.
  Deno.env.delete('WORKSHOP_GITHUB_TOKEN');
  equal((await handle(new Request(endpoint+'/api/output?job=1-1-extract&file=secret'))).status,400);
+ for(const job of ['1-1-private','1-1-../report','baseline-extract'])equal((await handle(new Request(endpoint+'/api/outputs?job='+encodeURIComponent(job)))).status,400);
+ equal((await handle(new Request(endpoint+'/api/output?job=1-1-cpue_vessel&file=report.html'))).status,400);
  const cors=await handle(new Request(endpoint+'/api/update',{method:'OPTIONS',headers:{Origin:'null'}}));equal(cors.status,204);equal(cors.headers.get('access-control-allow-origin'),'*');
 });
 Deno.test('Real skipped steps are reuse only after successful verified restore; dependencies wait',()=>{
@@ -27,5 +29,6 @@ Deno.test('Real skipped steps are reuse only after successful verified restore; 
  equal(d.stages.length,11);equal(d.stages[0].reused,true);equal(d.stages[0].status,'completed');
  equal(d.stages[1].status,'running');equal(d.stages[3].status,'waiting');equal(d.database_version,2025);
  equal(d.stages[3].parents,['extract','cpue_vessel']);equal(d.stages[9].parents.length,4);
+ steps[3].status='in_progress';equal(mapRun(run,[{id:8,steps}]).stages.filter(s=>s.status==='running').length,2);
  steps[0].conclusion='failure';equal(mapRun(run,[{id:8,steps}]).stages[0].reused,false);
 });

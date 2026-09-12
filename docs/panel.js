@@ -20,6 +20,12 @@ function affected(){
  let changed=true;while(changed){changed=false;for(const s of data.stages)if(!result.has(s.key)&&(s.parents||[]).some(p=>result.has(p))){result.add(s.key);changed=true;}}
  return result;
 }
+function plannedRoots(){
+ const roots=[...new Set([selectedKey(),...Object.keys(pendingBranches())])];if(roots.includes('data'))return ['data'];
+ const stages=new Map((data?.stages||[]).map(s=>[s.key,s]));
+ const ancestors=key=>{const found=new Set(),todo=[...(stages.get(key)?.parents||[])];while(todo.length){const parent=todo.pop();if(found.has(parent))continue;found.add(parent);todo.push(...(stages.get(parent)?.parents||[]));}return found;};
+ return roots.filter(key=>!roots.some(other=>other!==key&&ancestors(key).has(other)));
+}
 function nextSource(key){return branchCatalog?.options[key]?.[branchDrafts[key]||branchCatalog?.sources[key]?.branch]||data?.stages.find(s=>s.key===key)?.code_source;}
 function sourceLink(key){
  const link=node(key).querySelector('.source-link'),source=nextSource(key);
@@ -191,7 +197,7 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  $('run-link').textContent=data.has_run===false?'Ready':'Run #'+data.number;$('run-link').href=data.run_url;$('run-state').textContent=data.demo?.phase==='cleaning'?'Resetting…':data.has_run===false?'Ready for a fresh demonstration':stale?'Last verified state':expected?'New run pending':data.status==='completed'?(data.conclusion==='success'?'Complete · '+(data.stages.length-reused)+' run · '+reused+' reused':data.conclusion):data.stages.filter(s=>s.status==='running').length>1?data.stages.filter(s=>s.status==='running').length+' analyses running in parallel':data.status.replaceAll('_',' ');$('live-dot').className='dot '+(busy?'live':data.conclusion==='success'?'success':'');
  const source=node('data');source.classList.toggle('selected',selected==='data');source.querySelector('.node-control').setAttribute('aria-pressed',String(selected==='data'));const qc=data.data_intake?.quality_check,version=data.database_version||(data.data_intake?.published?qc?.proposed_version:null);source.querySelector('.release').textContent=version?'v'+version:'Versioned data';source.querySelector('.qc').textContent=sending&&changeKind==='data'?'Checking QC…':qc?(qc.accepted?'✓ QC passed':'× QC failed'):'QC before release';if(Number(version)>=2024&&(!qc||qc.accepted))source.querySelector('.qc').textContent='✓ One added batch';source.querySelector('.qc').classList.toggle('failed',!!qc&&!qc.accepted);
  for(const s of data.stages){const el=node(s.key),state=expected?(impact.has(s.key)||!selected?'waiting':s.status):s.status;el.className='stage '+state+(s.reused&&!expected?' reused':'')+(selected&&impact.has(s.key)?' impacted':'')+(selected&&!impact.has(s.key)?' outside-impact':'')+(selected===s.key?' selected':'');el.querySelector('.state-icon').textContent=s.reused&&!expected?'↺':icons[state]||'·';el.querySelector('.state-label').textContent=s.reused&&!expected?'Reused':states[state]||state;el.querySelector('.node-control').setAttribute('aria-pressed',String(selected===s.key));el.title=(s.parents.length?'Inputs: '+s.parents.map(p=>names[p]).join(' + '):'Input: accepted database release')+' · select to update downstream';}
- const count=selected?data.stages.filter(s=>impact.has(s.key)).length:data.stages.length,pendingCount=new Set([key,...Object.keys(pendingBranches())]).size,replayData=key==='data'&&Number(data.database_version)>=2024;
+ const count=selected?data.stages.filter(s=>impact.has(s.key)).length:data.stages.length,pendingCount=plannedRoots().length,replayData=key==='data'&&Number(data.database_version)>=2024;
  $('selection-title').textContent=key==='data'?(replayData?'Replay data update':'New data'):names[key]+(key.startsWith('prepare_')||key.startsWith('assessment_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
  $('progress').textContent=(data.has_run===false&&!data.baseline_available&&key!=='data'?'Prepare initial inputs → ':key==='data'?(replayData?'Replay the accepted data update → ':'Add one batch → QC → '):pendingCount>1?pendingCount+' starting stages → ':'Run this stage → ')+count+' stages run'+(count<data.stages.length?' · '+(data.stages.length-count)+' kept':'');
  for(const item of ['data',...data.stages.map(s=>s.key)])sourceLink(item);drawBranchButton(busy);

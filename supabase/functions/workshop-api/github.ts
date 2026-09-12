@@ -48,9 +48,27 @@ export function mapRun(run:any,jobs:any[]){
  execution:{mode:'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};
 }
 export function emptyRun(){return {ready:true,has_run:false,baseline_available:true,stages:definitions.map(([key,label,parents])=>({key,label:label.slice(3),parents,status:'waiting',reused:false,source_id:'',_step_number:null})),run_id:null,number:null,attempt:null,run_url:'',commit:'',status:'completed',conclusion:'success',database_version:2023,execution:{mode:'steps',job_count:0,jobs:[]},source:{stale:false,last_success:new Date().toISOString()},created_at:null,completed_at:null};}
+const moduleCache = new Map<string,Record<string,any>>();
+async function runModules(run:any){
+ try{
+  const ref=run.referenced_workflows?.find((w:any)=>w.path?.startsWith('kyuhank/cpue-actions-demo/.github/workflows/toy-pipeline.yml@'));
+  let commit=ref?.sha||ref?.path?.split('@').at(-1);
+  if(!/^[a-f0-9]{40}$/.test(commit||'')){
+   const workflow=await json(`contents/.github/workflows/update.yml?ref=${run.head_sha}`);
+   commit=atob(workflow.content.replace(/\s/g,'')).match(/uses:\s*kyuhank\/cpue-actions-demo\/\.github\/workflows\/toy-pipeline\.yml@([a-f0-9]{40})/)?.[1];
+  }
+  if(!/^[a-f0-9]{40}$/.test(commit||''))return {};
+  if(moduleCache.has(commit))return moduleCache.get(commit)!;
+  const r=await fetch(`https://raw.githubusercontent.com/kyuhank/cpue-actions-demo/${commit}/modules.lock.json`,{signal:AbortSignal.timeout(10000)});
+  if(!r.ok)return {};
+  const sources=await r.json(),safe:Record<string,any>={};
+  for(const [key] of definitions){const s=sources[key];if(s&&/^kyuhank\/cpue-demo-(extract|cpue|inputs|assessment|synthesis|report)$/.test(s.repository)&&/^[a-f0-9]{40}$/.test(s.commit))safe[key]={repository:s.repository,commit:s.commit,branch:String(s.branch).slice(0,80)};}
+  if(moduleCache.size>=16)moduleCache.clear();moduleCache.set(commit,safe);return safe;
+ }catch{return {};}
+}
 export async function current(){const runs=(await json('actions/workflows/update.yml/runs?per_page=1')).workflow_runs;
- if(!runs.length)return emptyRun();const r=runs[0];const jobs=(await json(`actions/runs/${r.id}/attempts/${r.run_attempt}/jobs?per_page=100`)).jobs;
- return mapRun(r,jobs);
+ if(!runs.length)return emptyRun();const r=runs[0];const [jobs,sources]=await Promise.all([json(`actions/runs/${r.id}/attempts/${r.run_attempt}/jobs?per_page=100`),runModules(r)]);
+ const result=mapRun(r,jobs.jobs);return {...result,stages:result.stages.map(s=>({...s,code_source:sources[s.key]}))};
 }
 export async function ensureBranch(){
  const existing=await github('git/ref/heads/'+DEMO_BRANCH,'GET',undefined,true);

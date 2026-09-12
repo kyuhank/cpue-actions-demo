@@ -7,7 +7,7 @@ import shutil
 import sys
 import time
 from datetime import datetime, timezone
-from workflow_plan import fingerprints, hashes, PARENTS
+from workflow_plan import fingerprints, hashes, module_sources, PARENTS
 
 ROOT = Path(__file__).resolve().parents[1]
 cases = json.loads((ROOT / 'pipeline/assessment_cases.json').read_text())
@@ -40,13 +40,16 @@ os.environ['GITHUB_JOB'] = key
 os.environ['TOY_CPUE_CHOICE'] = ('vessel_adjusted' if key.endswith('_vessel') else 'year_only') if key.startswith(('cpue_', 'prepare_')) else ''
 os.environ['TOY_ASSESSMENT_CASE'] = key if key.startswith('assessment_') else ''
 stage = ('cpue' if key.startswith('cpue_') else 'prepare_inputs' if key.startswith('prepare_') else 'assessment' if key.startswith('assessment_') else key)
+code_source = module_sources().get(key, {})
+if key.startswith('cpue_') and code_source.get('specification', {}).get('choice'):
+    os.environ['TOY_CPUE_CHOICE'] = code_source['specification']['choice']
 started = time.perf_counter()
 started_at = datetime.now(timezone.utc).isoformat()
-runpy.run_path(str(ROOT / 'pipeline' / (stage + '.py')), run_name='__main__')
+runpy.run_path(str(ROOT / 'pipeline' / code_source.get('entrypoint', stage + '.py')), run_name='__main__')
 compute_seconds = time.perf_counter() - started
 record = {'stage': key, 'fingerprint': plan['stages'][key]['fingerprint'] if plan else fingerprints()[key],
           'run_id': os.getenv('GITHUB_RUN_ID', 'local'), 'attempt': os.getenv('GITHUB_RUN_ATTEMPT', '1'),
-          'code_commit': os.getenv('TOY_CODE_COMMIT', 'local'), 'started_at': started_at,
+          'code_commit': os.getenv('TOY_CODE_COMMIT', 'local'), 'code_source': code_source, 'started_at': started_at,
           'compute_seconds': compute_seconds, 'outputs': hashes(work / 'outputs')}
 (work / 'record.json').write_text(json.dumps(record, indent=2) + '\n')
 pause = min(8, max(0, float(os.getenv('TOY_DEMO_PACE_SECONDS', '0'))))

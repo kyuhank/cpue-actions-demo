@@ -24,7 +24,7 @@ on:
         type: string
   push:
     branches: [main]
-    paths: ['data/**', 'pipeline/**', 'scripts/**', '.github/workflows/toy-pipeline.yml']
+    paths: ['data/**', 'pipeline/**', 'scripts/**', 'modules.lock.json', '.github/workflows/toy-pipeline.yml']
   workflow_dispatch:
 
 permissions:
@@ -69,6 +69,8 @@ jobs:
           path: source-data
       - name: Pull the pinned container
         run: docker pull "$TOY_CONTAINER_IMAGE"
+      - name: Retrieve locked analysis modules
+        run: python3 scripts/resolve_modules.py
       - name: Fetch versioned database snapshot
         if: env.SUPABASE_URL != '' || inputs.data_version != ''
         env:

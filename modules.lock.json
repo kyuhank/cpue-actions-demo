@@ -1,0 +1,57 @@
+{
+  "extract": {
+    "repository": "kyuhank/cpue-demo-extract",
+    "branch": "main",
+    "commit": "152052e15d25bab5adba71bb53d83142aaa4da80"
+  },
+  "cpue_vessel": {
+    "repository": "kyuhank/cpue-demo-cpue",
+    "branch": "model-a",
+    "commit": "5847c9dbcf4d415d4d6878b5fa42139036c723f0"
+  },
+  "cpue_year": {
+    "repository": "kyuhank/cpue-demo-cpue",
+    "branch": "model-b",
+    "commit": "22ee239317da726d18867a762e30e2598bbc5102"
+  },
+  "prepare_vessel": {
+    "repository": "kyuhank/cpue-demo-inputs",
+    "branch": "main",
+    "commit": "d8377bf63010817c587f7790709306d68844ea8f"
+  },
+  "prepare_year": {
+    "repository": "kyuhank/cpue-demo-inputs",
+    "branch": "main",
+    "commit": "d8377bf63010817c587f7790709306d68844ea8f"
+  },
+  "synthesis": {
+    "repository": "kyuhank/cpue-demo-synthesis",
+    "branch": "main",
+    "commit": "1397779c871bbd2e05214a2b0e9f14e6d8d615d2"
+  },
+  "report": {
+    "repository": "kyuhank/cpue-demo-report",
+    "branch": "main",
+    "commit": "8b421d47784bbd4b3fd7d3236ac4c36f0861d30d"
+  },
+  "assessment_vessel_ref": {
+    "repository": "kyuhank/cpue-demo-assessment",
+    "branch": "structure-1",
+    "commit": "0e1b3da2932290439897d62ebe26518869439394"
+  },
+  "assessment_vessel_high_m": {
+    "repository": "kyuhank/cpue-demo-assessment",
+    "branch": "structure-2",
+    "commit": "963d0db48ebf3fbbe0f7475f68a36a3d3d7668ab"
+  },
+  "assessment_year_ref": {
+    "repository": "kyuhank/cpue-demo-assessment",
+    "branch": "structure-1",
+    "commit": "0e1b3da2932290439897d62ebe26518869439394"
+  },
+  "assessment_year_high_m": {
+    "repository": "kyuhank/cpue-demo-assessment",
+    "branch": "structure-2",
+    "commit": "963d0db48ebf3fbbe0f7475f68a36a3d3d7668ab"
+  }
+}

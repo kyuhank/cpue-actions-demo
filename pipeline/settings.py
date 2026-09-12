@@ -23,6 +23,10 @@ def stage_settings():
 def assessment_cases(configured=True):
     cases = json.loads((ROOT / 'pipeline/assessment_cases.json').read_text())
     if configured:
+        modules = ROOT / 'module-versions.json'
+        if modules.exists():
+            sources = json.loads(modules.read_text())
+            cases = [{**case, **{k: v for k, v in sources.get(case['key'], {}).get('specification', {}).items() if k == 'M'}} for case in cases]
         settings = stage_settings()
         cases = [{**case, **settings.get(case['key'], {})} for case in cases]
     return cases

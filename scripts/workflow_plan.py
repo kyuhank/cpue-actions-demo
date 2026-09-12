@@ -36,13 +36,33 @@ def code_digest():
     return digest(b''.join(str(p.relative_to(ROOT)).encode() + b'\0' + p.read_bytes() for p in paths))
 
 
+def module_sources():
+    path = ROOT / 'module-versions.json'
+    sources = json.loads(path.read_text()) if path.exists() else {}
+    for source in sources.values():
+        for name, expected in source['files'].items():
+            target = ROOT / name
+            if not target.resolve().is_relative_to(ROOT) or digest(target.read_bytes()) != expected:
+                raise ValueError('Module source does not match its locked commit: ' + name)
+    return sources
+
+
+def stage_code_digest(key, sources):
+    if key not in sources:
+        return code_digest()
+    common = [ROOT / 'pipeline' / name for name in ('settings.py', 'choices.json', 'assessment_cases.json', 'age_model.py')]
+    common += [ROOT / 'scripts' / name for name in ('run_stage.py', 'workflow_plan.py')]
+    shared = digest(b''.join(str(p.relative_to(ROOT)).encode() + b'\0' + p.read_bytes() for p in common))
+    return digest(json.dumps({'shared': shared, 'module': sources[key]}, sort_keys=True).encode())
+
+
 def fingerprints():
     config = stage_settings()
     source = ROOT / os.getenv('TOY_SOURCE_DATABASE', 'data/toy-fishery.sqlite')
-    code = code_digest()
+    sources = module_sources()
     result = {}
     for key, parents in PARENTS.items():
-        inputs = {'code': code, 'image': os.getenv('TOY_CONTAINER_IMAGE', 'local'),
+        inputs = {'code': stage_code_digest(key, sources), 'image': os.getenv('TOY_CONTAINER_IMAGE', 'local'),
                   'settings': config.get(key, {}), 'parents': {p: result[p] for p in parents}}
         if key == 'extract':
             inputs['source'] = digest(source.read_bytes())
@@ -97,6 +117,7 @@ def unpack(content, target):
 
 def plan(previous=None):
     fingerprints_now = fingerprints()
+    sources = module_sources()
     previous = Path(previous) if previous else ROOT / '.previous-workflow'
     if not previous.exists() and os.getenv('GITHUB_ACTIONS') == 'true':
         try:
@@ -125,11 +146,14 @@ def plan(previous=None):
                 break
         if reuse:
             shutil.copytree(source, stages / key)
+        code_source = record.get('code_source', {}) if reuse else sources.get(key, {})
         records[key] = {'action': 'reuse' if reuse else 'run', 'fingerprint': fingerprints_now[key],
                         'parents': PARENTS[key], 'settings': stage_settings().get(key, {}),
                         'origin_run': record.get('run_id') if reuse else os.getenv('GITHUB_RUN_ID', 'local'),
-                        'origin_code_commit': record.get('code_commit') if reuse else os.getenv('TOY_CODE_COMMIT', 'local')}
-    value = {'run_id': os.getenv('GITHUB_RUN_ID', 'local'), 'trigger_commit': os.getenv('TOY_DATA_COMMIT', 'local'), 'code_sha256': code_digest(), 'stages': records}
+                        'origin_code_commit': code_source.get('commit') or (record.get('code_commit') if reuse else os.getenv('TOY_CODE_COMMIT', 'local')),
+                        'origin_repository': code_source.get('repository', 'kyuhank/cpue-actions-demo'),
+                        'origin_branch': code_source.get('branch'), 'code_source': code_source}
+    value = {'run_id': os.getenv('GITHUB_RUN_ID', 'local'), 'trigger_commit': os.getenv('TOY_DATA_COMMIT', 'local'), 'code_sha256': code_digest(), 'module_sources': sources, 'stages': records}
     (stages / '_plan.json').write_text(json.dumps(value, indent=2) + '\n')
     if os.getenv('GITHUB_OUTPUT'):
         with open(os.environ['GITHUB_OUTPUT'], 'a') as f:

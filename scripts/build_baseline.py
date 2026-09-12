@@ -22,6 +22,8 @@ with tempfile.TemporaryDirectory(prefix='cpue-baseline-') as folder:
     work = Path(folder)
     for name in ('pipeline','scripts'):
         shutil.copytree(ROOT/name, work/name, ignore=shutil.ignore_patterns('__pycache__'))
+    for name in ('modules.lock.json', 'module-versions.json'):
+        if (ROOT/name).exists(): shutil.copyfile(ROOT/name,work/name)
     (work/'config').mkdir(); (work/'config/stages.json').write_text('{}')
     (work/'supabase').mkdir()
     shutil.copyfile(ROOT/'supabase/snapshot.py',work/'supabase/snapshot.py')

@@ -2,9 +2,9 @@ name: Checks
 
 on:
   push:
-    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'supabase/snapshot.py', '.github/workflows/checks.yml']
+    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'modules.lock.json', 'supabase/snapshot.py', '.github/workflows/checks.yml']
   pull_request:
-    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'supabase/snapshot.py', '.github/workflows/checks.yml']
+    paths: ['pipeline/**', 'scripts/**', 'baseline/**', 'tests/**', 'modules.lock.json', 'supabase/snapshot.py', '.github/workflows/checks.yml']
 
 permissions:
   contents: read
@@ -18,7 +18,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Retrieve locked analysis modules
+        run: python3 scripts/resolve_modules.py
       - name: Verify intermediate starts and parallel calculations
         run: python3 tests/check_baseline.py
       - name: Verify dependency invalidation and provenance
         run: python3 tests/check_incremental.py
+      - name: Reproduce a report from its embedded files
+        run: python3 tests/check_reproduction.py
+      - name: Verify module identity and downstream invalidation
+        run: python3 tests/check_modules.py

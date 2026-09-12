@@ -19,3 +19,22 @@ stages/
 supabase/.temp/
 supabase/.env*
 supabase/.branches/
+
+# Source modules are retrieved from the exact commits in modules.lock.json.
+module-versions.json
+pipeline/extract.py
+pipeline/extract.sql
+pipeline/extract-catch.sql
+pipeline/cpue.py
+pipeline/cpue_vessel.py
+pipeline/cpue_year.py
+pipeline/prepare_inputs.py
+pipeline/assessment.py
+pipeline/assessment_vessel_ref.py
+pipeline/assessment_vessel_high_m.py
+pipeline/assessment_year_ref.py
+pipeline/assessment_year_high_m.py
+pipeline/synthesis.py
+pipeline/collect_results.py
+pipeline/report.py
+pipeline/reproduction.py

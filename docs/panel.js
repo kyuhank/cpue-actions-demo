@@ -255,7 +255,7 @@ async function loadConsole(){if(data.has_run===false||consolePending||data.statu
 function notice(text){$('notice-text').textContent=text;$('notice').hidden=false;}
 function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),active=steps.find(s=>s.status==='in_progress'),reused=data.stages.filter(s=>s.reused).length,busy=sending||!!expected||data.status!=='completed',stale=data.source?.stale,cloudBlocked=data.session&&!data.session.can_update;
  $('chain').classList.toggle('executing',busy);
- $('run-link').textContent=pendingRun?'Preparing run…':data.has_run===false?'Ready':'Run #'+data.number;$('run-link').href=data.run_url;$('run-state').textContent=pendingRun?'Starting the selected workflow':data.demo?.phase==='cleaning'?'Resetting…':data.has_run===false?'Ready for a fresh demonstration':stale?'Last verified state':expected?'New run pending':data.status==='completed'?(data.conclusion==='success'?'Complete · '+(data.stages.length-reused+(data.intake_stages||[]).filter(j=>!j.skipped).length)+' run · '+reused+' reused':data.conclusion):data.stages.filter(s=>s.status==='running').length>1?data.stages.filter(s=>s.status==='running').length+' analyses running in parallel':data.status.replaceAll('_',' ');$('live-dot').className='dot '+(busy?'live':data.conclusion==='success'?'success':'');
+ $('run-link').textContent=pendingRun?(pendingRun.run_id?'Run accepted':'Preparing run…'):data.has_run===false?'Ready':'Run #'+data.number;$('run-link').href=pendingRun?.run_url||data.run_url;$('run-state').textContent=pendingRun?'Starting the selected workflow':data.demo?.phase==='cleaning'?'Resetting…':data.has_run===false?'Ready for a fresh demonstration':stale?'Last verified state':expected?'New run pending':data.status==='completed'?(data.conclusion==='success'?'Complete · '+(data.stages.length-reused+(data.intake_stages||[]).filter(j=>!j.skipped).length)+' run · '+reused+' reused':data.conclusion):data.stages.filter(s=>s.status==='running').length>1?data.stages.filter(s=>s.status==='running').length+' analyses running in parallel':data.status.replaceAll('_',' ');$('live-dot').className='dot '+(busy?'live':data.conclusion==='success'?'success':'');
  const source=node('data'),dataImpacted=selected==='data'||impact.has('data'),dataRetained=!!data.has_run&&(data.intake_stages? !data.intake_stages.some(j=>j.key==='ingest'&&!j.skipped&&j.status!=='not_requested'):data.stages.some(j=>j.key==='extract'&&j.reused));
  source.classList.toggle('running',databaseActive());source.classList.toggle('completed',data.database_stage?.status==='completed');source.classList.toggle('impacted',!!selected&&dataImpacted);source.classList.toggle('outside-impact',!!selected&&!dataImpacted);source.classList.toggle('reused',!dataImpacted&&(!!selected||dataRetained));source.classList.toggle('selected',selected==='data');source.querySelector('.node-control').setAttribute('aria-pressed',String(selected==='data'));const qc=data.data_intake?.quality_check,version=(data.intake_stages?.some(j=>j.key==='submission'&&!j.skipped)&&!data.intake_stages?.some(j=>j.key==='ingest'&&j.status==='completed')?data.latest_database_version:data.database_version)||(data.data_intake?.published?qc?.proposed_version:null);source.querySelector('.release').textContent=version?'v'+version:'Versioned data';source.querySelector('.qc').textContent=sending&&changeKind==='data'?'Awaiting submission':qc?(qc.accepted?'✓ QC passed':'× QC failed'):'QC before release';if(Number(version)>=2024&&(!qc||qc.accepted))source.querySelector('.qc').textContent='✓ One added batch';source.querySelector('.qc').classList.toggle('failed',!!qc&&!qc.accepted);if(databaseActive())source.querySelector('.qc').textContent='Verifying release…';
  for(const s of data.stages){const el=node(s.key),state=expected?(impact.has(s.key)||!selected?'waiting':s.status):s.status;el.className='stage '+state+(s.reused&&!expected?' reused':'')+(selected&&impact.has(s.key)?' impacted':'')+(selected&&!impact.has(s.key)?' outside-impact':'')+(selected===s.key?' selected':'');el.querySelector('.state-icon').textContent=s.reused&&!expected?'↺':icons[state]||'·';el.querySelector('.state-label').textContent=s.reused&&!expected?'Reused':states[state]||state;el.querySelector('.node-control').setAttribute('aria-pressed',String(selected===s.key));el.title=(s.parents.length?'Inputs: '+s.parents.map(p=>names[p]).join(' + '):'Input: accepted database release')+' · select to update downstream';}
@@ -268,7 +268,7 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  if(key==='data'){const choices=[...(data.data_versions||[2023]).map(v=>[String(v),'Release '+v]),['new','Submit example data']];const signature=JSON.stringify(choices);if($('data-version').dataset.choices!==signature){$('data-version').replaceChildren(...choices.map(([value,label])=>{const option=document.createElement('option');option.value=value;option.textContent=label;return option;}));$('data-version').dataset.choices=signature;}$('data-version').value=dataDraft||'new';}
  $('sql-button').hidden=key!=='extract';$('sql-button').disabled=!nextSource('extract');
  drawBranches(key,busy);
- $('run').disabled=busy||!!stale||!!cloudBlocked;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?'Submit example data →':pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()==='failed'&&!busy){$('selection-title').textContent='Retry data submission';$('run').textContent='Retry submission →';}
+ $('run').disabled=busy||!!stale||!!cloudBlocked;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':data.status==='queued'?'Queued…':data.status!=='completed'?'Running…':key==='data'?'Submit example data →':pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';if(key==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()==='failed'&&!busy){$('selection-title').textContent='Retry data submission';$('run').textContent='Retry submission →';}
  if(submittingData&&qualityStatus()!=='failed'&&!busy){$('selection-title').textContent='Data submission';$('progress').textContent='QC returns once → provider correction and resubmission → full workflow';$('run').textContent='Submit example data →';}
  if(key==='data'&&dataDraft&&dataDraft!=='new'){$('selection-title').textContent='Data release '+dataDraft;$('progress').textContent='Use this snapshot → 13 analysis stages';$('run').textContent=busy?'Starting…':'Run with v'+dataDraft+' →';}
  $('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||dataDraft!=='new'||!data.database_connected;$('invalid').disabled=busy||!!stale;
@@ -288,7 +288,8 @@ function narrate(){
  if(data.source?.stale||(!sending&&!expected&&data.session&&!data.session.can_update&&data.status==='completed'))return;
  let message;
  if(sending)message=changeKind==='data'?'Submitting the example and requesting quality checks.':'Saving the selected versions and preparing the dependent jobs.';
- else if(expected)message='Update accepted. Preparing the selected workflow.';
+ else if(pendingRun){const elapsed=Math.floor((Date.now()-pendingRun.started)/1000);message=pendingRun.run_id?'Request accepted. Waiting for the runner to start · '+elapsed+' s':'Saving the selection and confirming the execution request · '+elapsed+' s';}
+ else if(data.has_run&&data.status==='queued')message='Run #'+data.number+' accepted. Waiting for an available runner · '+Math.max(0,Math.floor((Date.now()-Date.parse(data.created_at))/1000))+' s';
  else if(phase==='returned'){message='QC failed: one record has zero hooks. Returning the submission for correction.';record.dataset.phase='correction';}
  else if(phase==='resubmitting'){message='Resubmit: the provider’s corrected file is sent back for QC.';record.dataset.phase='correction';}
  else if(phase==='rechecking'){message='Corrected records resubmitted → checking them again.';record.dataset.phase='correction';}
@@ -308,7 +309,11 @@ function narrate(){
 function observeRun(next){
  if(pendingRun){
   if(!next.has_run||Number(next.run_id)<=Number(pendingRun.previous||0))return false;
-  if(expected&&next.commit!==expected)return false;
+  if(pendingRun.run_id&&String(next.run_id)!==String(pendingRun.run_id))return false;
+  if(expected&&next.commit!==expected){
+   if(!pendingRun.run_id)return false;
+   notice('The runner did not confirm the selected code version. Inspect the run record before trying again.');
+  }
   pendingRun=null;expected='';consoleRecord=null;loadBranches();
  }
  if(data?.run_id&&next.run_id&&Number(next.run_id)<Number(data.run_id))return false;
@@ -333,18 +338,20 @@ async function refresh(force=false){
  if(!force&&Date.now()-lastRefresh<interval)return;
  refreshing=true;lastRefresh=Date.now();
  try{
-  const r=await fetch('/api/status',{cache:'no-store'});if(!r.ok)throw Error();const next=await r.json();if(!next.ready)throw Error();
-  if(!observeRun(next))return;
+  const r=await fetch('/api/status',{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!r.ok)throw Error();const next=await r.json();if(!next.ready)throw Error();
+  // A poll started before the click must not acknowledge the run before its POST returns.
+  if(sending)return;
+  if(!observeRun(next)){if(pendingRun&&Date.now()-pendingRun.started>60000){notice('The run is taking longer to appear. Checking its execution receipt; no duplicate request has been sent.');}return;}
   if(data.has_run===false&&!pendingRun){consoleRecord=null;$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}
   draw();
  }catch{$('message').textContent='Live connection unavailable · retrying';$('run').disabled=true;}finally{refreshing=false;}
 }
 async function refreshLive(){
- if(window.workshopActive===false||liveRefreshing||pendingRun||sending||!data?.has_run||data.status==='completed'||Date.now()-lastLive<450)return;
- liveRefreshing=true;lastLive=Date.now();const id=data.run_id;
+ if(window.workshopActive===false||liveRefreshing||sending||(!pendingRun?.run_id&&(!data?.has_run||data.status==='completed'))||Date.now()-lastLive<450)return;
+ liveRefreshing=true;lastLive=Date.now();const id=pendingRun?.run_id||data.run_id;
  try{
-  const r=await fetch('/api/live?run='+id,{cache:'no-store'});if(!r.ok)return;const live=await r.json();
-  if(!live.ready||data.run_id!==id||pendingRun)return;
+  const r=await fetch('/api/live?run='+id,{cache:'no-store',signal:AbortSignal.timeout(10000)});if(!r.ok)return;const live=await r.json();
+  if(!live.ready||String(pendingRun?.run_id||data.run_id)!==String(id))return;
   const next={...data,...live,database_version:live.database_version||data.database_version};
   if(observeRun(next))draw();if(live.status==='completed')await refresh(true);
  }catch{}finally{liveRefreshing=false;}
@@ -411,15 +418,22 @@ async function publish(invalid=false){
  if(stage!=='data'&&branchCatalog?.options[stage])choices[stage]=$('branch').value;
  if(!invalid&&!branchCatalog){notice('Loading registered branches. Please try again in a moment.');loadBranches();return;}
  const previous=structuredClone(data);
- qualityRecordOpen=false;runRoots=[...new Set([dataDraft&&dataDraft!=='new'&&Number(dataDraft)!==Number(data.database_version)?'data':stage,...Object.keys(choices)])];hidePreview();sending=true;changeKind=stage;pendingRun={previous:data.run_id};expected='';
+ qualityRecordOpen=false;runRoots=[...new Set([dataDraft&&dataDraft!=='new'&&Number(dataDraft)!==Number(data.database_version)?'data':stage,...Object.keys(choices)])];hidePreview();sending=true;changeKind=stage;pendingRun={previous:data.run_id,started:Date.now(),request:crypto.randomUUID()};expected='';
  data={...data,has_run:false,run_id:null,run_url:'',status:'queued',conclusion:null,execution:{jobs:[]},data_intake:null,database_stage:{status:'waiting'},intake_stages:[],stages:data.stages.map(s=>({...s,status:'waiting',reused:false})),session:{...data.session,can_update:false}};
  $('notice').hidden=true;draw();
  try{
-  const r=await fetch(invalid?'/api/check-invalid-data':'/api/run',{method:'POST',headers:{'Content-Type':'application/json','X-Workshop-Action':'publish-synthetic-data','X-Workshop-Request':crypto.randomUUID()},body:invalid?'{}':JSON.stringify({start:stage,branches:choices,...(dataDraft&&dataDraft!=='new'?{data_version:Number(dataDraft)}:{})})}),result=await r.json();
+  const r=await fetch(invalid?'/api/check-invalid-data':'/api/run',{method:'POST',headers:{'Content-Type':'application/json','X-Workshop-Action':'publish-synthetic-data','X-Workshop-Request':pendingRun.request},signal:AbortSignal.timeout(45000),body:invalid?'{}':JSON.stringify({start:stage,branches:choices,...(dataDraft&&dataDraft!=='new'?{data_version:Number(dataDraft)}:{})})}),result=await r.json();
   if(!r.ok)throw Error(result.detail||'Update failed');
-  expected=result.published===false?'':result.commit||(result.database_version?'db-'+result.database_version:'');
+  expected=result.published===false?'':result.commit||'';
+  if(pendingRun){pendingRun.run_id=result.run_id;pendingRun.run_url=result.run_url;}
   if(result.published===false){pendingRun=null;data=previous;$('console').hidden=true;$('logs').setAttribute('aria-expanded','false');$('logs').textContent='Show record';}
- }catch(e){pendingRun=null;expected='';data=previous;notice(e.message);}finally{sending=false;draw();await refresh(true);}
+ }catch(e){
+  // A lost POST response does not mean GitHub rejected the request. Read its receipt once.
+  let receipt=null;
+  try{const r=await fetch('/api/request?id='+pendingRun.request,{cache:'no-store',signal:AbortSignal.timeout(10000)});if(r.ok)receipt=await r.json();}catch{}
+  if(receipt?.found&&receipt.run_id){expected=receipt.commit;pendingRun.run_id=receipt.run_id;pendingRun.run_url=receipt.run_url;}
+  else{pendingRun=null;expected='';data=previous;notice(receipt?.error||e.message||'The request could not be confirmed. Refreshing its status.');}
+ }finally{sending=false;draw();await refreshLive();await refresh(true);}
 }
 $('sql-close').onclick=()=>$('sql-view').close();
 $('sql-button').onclick=async()=>{
@@ -437,6 +451,6 @@ $('sql-button').onclick=async()=>{
 };
 $('data-version').onchange=()=>{dataDraft=$('data-version').value;draw();};
  $('run').onclick=()=>publish(selectedKey()==='data'&&(!dataDraft||dataDraft==='new')&&qualityStatus()!=='failed');$('invalid').onclick=()=>publish(true);$('logs').onclick=()=>{qualityRecordOpen=false;$('console').hidden=!$('console').hidden;$('logs').setAttribute('aria-expanded',String(!$('console').hidden));$('logs').textContent=$('console').hidden?'Show record':'Hide record';showConsole();};$('dismiss').onclick=()=>{$('notice').hidden=true;};
-if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');refresh();loadBranches();setInterval(()=>{refresh();refreshLive();if(data?.status==='completed'&&!data?.session?.can_update)draw();},250);
+if(parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');refresh();loadBranches();setInterval(()=>{refresh();refreshLive();if(pendingRun||data?.status==='queued'||data?.status==='completed'&&!data?.session?.can_update)draw();},250);
 async function heartbeat(){try{const r=await fetch('/api/presentation-info',{cache:'no-store'});if(r.ok&&(await r.json()).presentation==='cpue-workshop'&&parent!==window)parent.postMessage({type:'cpue-panel-ready'},'*');}catch{}}
 heartbeat();setInterval(heartbeat,4000);

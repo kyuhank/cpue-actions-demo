@@ -7,7 +7,9 @@ const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GE
 const reply=(value:unknown,status=200)=>Response.json(value,{status,headers:cors});
 const enabled=()=>/^github_pat_[A-Za-z0-9_]+$/.test(Deno.env.get('WORKSHOP_GITHUB_TOKEN')||'')&&Deno.env.get('WORKSHOP_ZERO_BUDGET_CONFIRMED')==='true';
 async function status(){
- const [s,limits,database]:any[]=await Promise.all([cached('status',Deno.env.get('WORKSHOP_GITHUB_TOKEN')?1:300,current),rpc('workshop_state'),cached('database:current',10,()=>rpc('cpue_snapshot',{p_version:null}))]);
+ let [s,limits,database]:any[]=await Promise.all([cached('status',Deno.env.get('WORKSHOP_GITHUB_TOKEN')?1:300,current),rpc('workshop_state'),cached('database:current',10,()=>rpc('cpue_snapshot',{p_version:null}))]);
+ const receipt=limits.last_request?.result;
+ if(receipt?.run_id>Number(s.run_id||0)&&Date.parse(limits.last_request.created_at)>Date.parse(limits.last_reset_at||'1970-01-01'))s=await current(receipt.run_id);
  const pending=pendingUpdate(limits,s),demo=enabled()?await observe(s,limits):await rpc('workshop_demo_state');
  const can=enabled()&&demo.phase!=='cleaning'&&!pending&&limits.remaining>0&&(!limits.next_update||Date.parse(limits.next_update)<=Date.now())&&s.status==='completed';
  const record=limits.last_request;let intake:{quality_check:any,published:boolean,checked_at:number,first_quality_check?:any,correction?:any}|null=record?.result?.quality_check?{quality_check:record.result.quality_check,published:record.result.published,checked_at:Date.parse(record.created_at)/1000}:null;
@@ -42,6 +44,12 @@ export async function handle(request:Request){
   if(request.method==='GET'){
    if(path==='/api/presentation-info')return reply({presentation:'cpue-workshop',hosted:true,enabled:enabled()});
    if(path==='/api/status')return reply(await status());
+   if(path==='/api/request'){
+    const id=u.searchParams.get('id')||'';
+    if(!/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(id)||[...u.searchParams.keys()].some(k=>k!=='id')||u.searchParams.getAll('id').length!==1)return reply({detail:'Choose a workshop request.'},400);
+    const control=await rpc('workshop_state'),record=control.last_request;
+    return reply(record?.result?.request===id?{found:true,...record.result}:{found:false});
+   }
    if(path==='/api/live'){
     const id=u.searchParams.get('run')||'';
     if(!/^\d{1,20}$/.test(id)||[...u.searchParams.keys()].some(k=>k!=='run')||u.searchParams.getAll('run').length!==1)return reply({detail:'Choose a workshop run.'},400);
@@ -102,13 +110,13 @@ export async function handle(request:Request){
     await rpc('workshop_demo_start',{p_request:id});
     const mode=kind==='invalid'?'invalid':'valid';
     result={...await runBranches('extract',selection?.branches||{},id,false,2024),request:id,intake_mode:mode,published:true,database_version:2024};
-    await dispatch(2024,mode,id);
+    Object.assign(result,await dispatch(2024,mode,id,result.commit));
    }else{await rpc('workshop_demo_start',{p_request:id});result=selection?await runBranches(kind,selection.branches,id):branchMatch?await changeBranch(kind,branchMatch[2],id):await change(kind);}
-   result.previous_run=s.run_id;
+   result.previous_run=s.run_id;result.request=id;
    await rpc('workshop_finish',{p_id:id,p_result:result});await invalidate();return reply(result,202);
   }catch(e){
    // Ambiguous external failures are recorded and never retried automatically.
-   await rpc('workshop_finish',{p_id:id,p_result:{error:'Check the last release and GitHub run before retrying.'}});
+   await rpc('workshop_finish',{p_id:id,p_result:{request:id,error:'The execution request could not be confirmed. Check the run record before trying again.'}});
    throw e;
   }
  }catch(e){return reply({detail:e instanceof Error?e.message:'Workshop service unavailable.'},502);}

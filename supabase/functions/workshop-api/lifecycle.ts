@@ -4,7 +4,7 @@ import {rpc} from './database.ts';
 export function pendingUpdate(limits:any,run:any){
  const result=limits.last_request?.result;
  if(limits.last_reset_at&&Date.parse(limits.last_request?.created_at||'1970-01-01')<=Date.parse(limits.last_reset_at))return false;
- return !!result&&result.previous_run===run.run_id&&result.published!==false&&!result.error;
+ return !!result&&(result.run_id?Number(result.run_id)>Number(run.run_id||0):result.previous_run===run.run_id)&&result.published!==false&&!result.error;
 }
 
 export async function observe(run:any,limits:any){

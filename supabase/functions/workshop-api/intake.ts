@@ -1,7 +1,10 @@
-import {json,REPO,DEMO_BRANCH} from './github.ts';
+import {json,REPO,DEMO_BRANCH,sourceCommit} from './github.ts';
 import {rpc,cached,invalidate} from './database.ts';
 import batches from './batches.json' with {type:'json'};
 export class IntakePending extends Error {}
+export function validateIntakeRun(record:any,run:any,claims:any){
+ if(run.path!=='.github/workflows/update.yml'||run.head_sha!==claims.sha||sourceCommit(run)!==record.result.commit||(record.result.run_id&&String(record.result.run_id)!==claims.run_id)||String(run.run_attempt)!==claims.run_attempt||run.status==='completed')throw Error('This intake run is no longer active.');
+}
 const issuer='https://token.actions.githubusercontent.com';
 const bytes=(s:string)=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
 export function validateClaims(c:any,now=Date.now()/1000){
@@ -23,9 +26,9 @@ export async function acceptIntake(request:Request){
  const text=await request.text();if(text.length>256)throw Error('Invalid intake request.');const body=JSON.parse(text);
  if(Object.keys(body).sort().join(',')!=='batch_sha256,request')throw Error('Invalid intake fields.');
  const limits=await rpc('workshop_state'),record=limits.last_request;
- if(record?.result?.request!==body.request||!['valid','invalid'].includes(record.result.intake_mode)||record.result.commit!==claims.sha||Date.parse(record.created_at)<Date.now()-10*60000)throw Error('This intake request is no longer active.');
+ if(record?.result?.request!==body.request||!['valid','invalid'].includes(record.result.intake_mode)||Date.parse(record.created_at)<Date.now()-10*60000)throw Error('This intake request is no longer active.');
  const run=await json('actions/runs/'+claims.run_id);
- if(run.path!=='.github/workflows/update.yml'||run.head_sha!==claims.sha||String(run.run_attempt)!==claims.run_attempt||run.status==='completed')throw Error('This intake run is no longer active.');
+ validateIntakeRun(record,run,claims);
  const workflow=await json('contents/.github/workflows/update.yml?ref='+claims.sha);
  const pin=atob(workflow.content.replace(/\s/g,'')).match(/toy-pipeline\.yml@([a-f0-9]{40})/)?.[1];
  if(!pin||claims.job_workflow_ref!==`kyuhank/cpue-actions-demo/.github/workflows/toy-pipeline.yml@${pin}`||claims.job_workflow_sha!==pin)throw Error('Unregistered intake workflow.');

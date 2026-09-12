@@ -1,6 +1,9 @@
 import { unzipSync, gunzipSync } from 'npm:fflate@0.8.2';
 export const REPO = 'kyuhank/cpue-toy-data';
 export const DEMO_BRANCH = 'demo-runtime';
+// A dispatch can resolve a recently updated branch to its previous head.
+// The workflow checks out this explicit input; keep it distinct from the launcher SHA.
+export function sourceCommit(run:any):string{return /^Workshop · ([a-f0-9]{40})$/.exec(run.display_title||'')?.[1]||run.head_sha;}
 export const definitions = [
  ['extract','01 Extract',[]], ['cpue_vessel','02 CPUE: year + vessel',['extract']],
  ['cpue_year','02 CPUE: year only',['extract']],
@@ -84,7 +87,7 @@ export function mapRun(run:any,jobs:any[]){
  });
  const databaseStep=steps.find((s:any)=>s.name==='Fetch versioned database snapshot');
  const database_stage={status:databaseStep?.status==='in_progress'?'running':databaseStep?.conclusion==='success'?'completed':databaseStep?.conclusion==='failure'?'failed':'waiting',started_at:databaseStep?.started_at,completed_at:databaseStep?.completed_at};
- return {ready:true,has_run:true,stages,intake_stages,database_stage,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
+ return {ready:true,has_run:true,stages,intake_stages,database_stage,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:sourceCommit(run),workflow_commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
  trigger_message:run.display_title.startsWith('Database version ')?run.display_title:(run.head_commit?.message||run.display_title).split('\n')[0].slice(0,160),database_version:/^Database version 20\d{2}$/.test(run.display_title)?Number(run.display_title.slice(-4)):null,
  execution:{mode:distributed?'module_jobs':grouped?'grouped_steps':'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};
 }
@@ -126,7 +129,7 @@ async function moduleConfiguration(triggerCommit:string){
  const result={...selectedModules(locked,catalog,selections),intakeSource:{repository:'kyuhank/cpue-actions-demo',branch:'main',commit},dataVersion:[2021,2022,2023,2024].includes(rawData.version)?rawData.version:undefined};
  if(moduleCache.size>=16)moduleCache.clear();moduleCache.set(triggerCommit,result);return result;
 }
-async function runModules(run:any){try{return await moduleConfiguration(run.head_sha);}catch{return {sources:{} as Record<string,ModuleSource>,dataVersion:undefined,intakeSource:undefined};}}
+async function runModules(run:any){try{return await moduleConfiguration(sourceCommit(run));}catch{return {sources:{} as Record<string,ModuleSource>,dataVersion:undefined,intakeSource:undefined};}}
 export async function branches(){
  const branch=await github('git/ref/heads/'+DEMO_BRANCH,'GET',undefined,true);
  const head=branch.ok?await branch.json():await json('git/ref/heads/main');
@@ -138,8 +141,8 @@ export async function liveRun(id:string){
  if(run.path!=='.github/workflows/update.yml')throw Error('Not a workshop run.');
  return mapRun(run,jobs.jobs);
 }
-export async function current(){const runs=(await json('actions/workflows/update.yml/runs?per_page=1')).workflow_runs;
- if(!runs.length)return emptyRun();const r=runs[0];const [jobs,sources]=await Promise.all([json(`actions/runs/${r.id}/attempts/${r.run_attempt}/jobs?per_page=100`),runModules(r)]);
+export async function current(id?:number){const runs=id?[await json('actions/runs/'+id)]:(await json('actions/workflows/update.yml/runs?per_page=1')).workflow_runs;
+ if(!runs.length)return emptyRun();const r=runs[0];if(r.path!=='.github/workflows/update.yml')throw Error('Not a workshop run.');const [jobs,sources]=await Promise.all([json(`actions/runs/${r.id}/attempts/${r.run_attempt}/jobs?per_page=100`),runModules(r)]);
  const result=mapRun(r,jobs.jobs);return {...result,database_version:result.database_version||sources.dataVersion||null,stages:result.stages.map(s=>({...s,code_source:sources.sources[s.key]})),intake_stages:result.intake_stages.map(s=>({...s,code_source:sources.intakeSource}))};
 }
 export async function ensureBranch(){
@@ -148,9 +151,12 @@ export async function ensureBranch(){
  const base=await json('git/ref/heads/main');
  await github('git/refs','POST',{ref:'refs/heads/'+DEMO_BRANCH,sha:base.object.sha});return base.object.sha;
 }
-export async function dispatch(version?:number,intakeMode='none',request=''){
- await ensureBranch();
- await github('actions/workflows/update.yml/dispatches','POST',{ref:DEMO_BRANCH,inputs:{...(version?{data_version:String(version)}:{}),...(intakeMode==='none'?{}:{intake_mode:intakeMode,request_id:request})}});
+export async function dispatch(version?:number,intakeMode='none',request='',commit?:string){
+ const source=commit||await ensureBranch();
+ if(!/^[a-f0-9]{40}$/.test(source))throw Error('An exact source commit is required.');
+ const response=await github('actions/workflows/update.yml/dispatches','POST',{ref:DEMO_BRANCH,return_run_details:true,inputs:{source_commit:source,request_id:request,...(version?{data_version:String(version)}:{}),...(intakeMode==='none'?{}:{intake_mode:intakeMode})}});
+ const receipt=response.status===204?{}:await response.json();
+ return {run_id:receipt.workflow_run_id||null,run_url:receipt.html_url||null};
 }
 export async function removeDemonstrationRuns(upToRun:number){
  // Fixed workflow and repository: no guest can choose a deletion target.
@@ -235,8 +241,8 @@ export async function change(stage:string){
  config[stage]=setting;
  const body={message:'Update synthetic '+description,sha:record.sha,branch:DEMO_BRANCH,content:btoa(JSON.stringify(config,null,2)+'\n'),author:{name:'kyuhank',email:'kh2064@gmail.com'},committer:{name:'kyuhank',email:'kh2064@gmail.com'}};
  const committed=await (await github('contents/config/stages.json','PUT',body)).json();
- await dispatch();
- return {stage,setting,description,commit:committed.commit.sha,url:committed.commit.html_url};
+ const receipt=await dispatch(undefined,'none','',committed.commit.sha);
+ return {stage,setting,description,commit:committed.commit.sha,url:committed.commit.html_url,...receipt};
 }
 
 export function parseSelection(text:string){
@@ -283,8 +289,8 @@ export async function runBranches(start:string,choices:Record<string,string>,req
  const description=Object.entries(updates).map(([key,source])=>`${key}: ${source.branch} @ ${source.commit.slice(0,8)}`).join('; ');
  const committed=await (await github('git/commits','POST',{message:'Run module selection: '+description,tree:tree.sha,parents:[head],author:identity,committer:identity})).json();
  await github('git/refs/heads/'+DEMO_BRANCH,'PATCH',{sha:committed.sha,force:false});
- if(submit)await dispatch(dataVersion);
- return {stage:start,branches:updates,commit:committed.sha,url:`https://github.com/${REPO}/commit/${committed.sha}`};
+ const receipt=submit?await dispatch(dataVersion,'none',request,committed.sha):{};
+ return {stage:start,branches:updates,commit:committed.sha,url:`https://github.com/${REPO}/commit/${committed.sha}`,...receipt};
 }
 export async function changeBranch(stage:string,branch:string,request:string){
  const result=await runBranches(stage,{[stage]:branch},request);

@@ -1,0 +1,50 @@
+name: Check module reproducibility
+on:
+  workflow_call:
+    inputs:
+      repository:
+        type: string
+        required: true
+      commit:
+        type: string
+        required: true
+      harness:
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  check:
+    name: Module reproducibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: kyuhank/cpue-actions-demo
+          ref: ${{ inputs.harness }}
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.commit }}
+          path: candidate
+          persist-credentials: false
+      - name: Retrieve the fixed reference modules
+        run: python3 scripts/resolve_modules.py
+      - name: Repeat the module and check its outputs
+        env:
+          MODULE_REPOSITORY: ${{ inputs.repository }}
+          MODULE_COMMIT: ${{ inputs.commit }}
+          TOY_CONTAINER_IMAGE: ghcr.io/pacificcommunity/cpue-workshop@sha256:17b03d6e06da229b17524997d8a3fc8eb5f8f25233894b5ab99f89109b3890c5
+        run: |
+          docker pull "$TOY_CONTAINER_IMAGE"
+          docker run --rm --network none --user "$(id -u):$(id -g)" --volume "$PWD:/work" --workdir /work \
+            --env MODULE_REPOSITORY --env MODULE_COMMIT --env TOY_CONTAINER_IMAGE \
+            "$TOY_CONTAINER_IMAGE" python scripts/module_check.py /work/candidate
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: module-check
+          path: module-check.json
+          retention-days: 1
+          if-no-files-found: error

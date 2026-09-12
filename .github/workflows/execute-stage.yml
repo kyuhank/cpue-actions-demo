@@ -1,0 +1,57 @@
+name: Run a verified module
+on:
+  workflow_call:
+    inputs:
+      stage:
+        type: string
+        required: true
+      module:
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  execute:
+    name: Execute
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      WORKSHOP_STAGE: ${{ inputs.stage }}
+      WORKSHOP_MODULE: ${{ inputs.module }}
+      TOY_CONTAINER_IMAGE: ghcr.io/pacificcommunity/cpue-workshop@sha256:17b03d6e06da229b17524997d8a3fc8eb5f8f25233894b5ab99f89109b3890c5
+      TOY_DEMO_PACE_SECONDS: 4
+    steps:
+      - name: Download code and recorded inputs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: workflow-context-${{ github.run_attempt }}
+      - name: Restore the versioned workspace
+        run: python3 -c 'import tarfile; tarfile.open("workflow-context.tar.gz").extractall(filter="data")'
+      - name: Download dependency outputs
+        if: inputs.stage != 'extract'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: stage-${{ github.run_attempt }}-*
+          path: transfers
+          merge-multiple: true
+      - name: Restore parent outputs
+        run: python3 scripts/execute_stage.py prepare "$WORKSHOP_STAGE" "$WORKSHOP_MODULE"
+      - name: Pull container image
+        run: docker pull "$TOY_CONTAINER_IMAGE"
+      - name: Run module
+        run: python3 scripts/execute_stage.py run "$WORKSHOP_STAGE" "$WORKSHOP_MODULE"
+      - name: Save outputs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stage-${{ github.run_attempt }}-${{ inputs.stage }}
+          path: stage-${{ github.run_attempt }}-${{ inputs.stage }}.tar.gz
+          retention-days: 1
+          if-no-files-found: error
+      - name: Save the complete workflow outputs
+        if: inputs.stage == 'report'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: workflow-${{ github.run_attempt }}
+          path: stages/
+          retention-days: 1
+          if-no-files-found: error

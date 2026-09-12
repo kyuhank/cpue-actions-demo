@@ -41,3 +41,10 @@ pipeline/reproduction.py
 
 pipeline/prepare_vessel.py
 pipeline/prepare_year.py
+
+module-check.json
+module-checks.json
+execution-context.json
+workflow-context.tar.gz
+context.tar.gz
+transfers/

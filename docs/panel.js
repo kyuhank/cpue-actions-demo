@@ -98,7 +98,7 @@ function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=
  $('selection-title').textContent=key==='data'?(replayData?'Replay data update':'New data'):names[key]+(key.startsWith('prepare_')||key.startsWith('assessment_')?' · CPUE '+(key.includes('vessel')?'A':'B'):'');
  $('progress').textContent=(data.has_run===false&&!data.baseline_available&&key!=='data'?'Prepare initial inputs → ':key==='data'?(replayData?'Replay the accepted data update → ':'Add one batch → QC → '):pendingCount>1?pendingCount+' starting stages → ':'Run this stage → ')+count+' stages run'+(count<data.stages.length?' · '+(data.stages.length-count)+' kept':'');
  for(const item of ['data',...data.stages.map(s=>s.key)])sourceLink(item);
- $('sql-button').hidden=key!=='extract';
+ $('sql-button').hidden=key!=='extract';$('sql-button').disabled=!nextSource('extract');
  drawBranches(key,busy);
  $('run').disabled=busy||!!stale;$('run').setAttribute('aria-disabled',String(busy||!!stale||!!cloudBlocked));$('run').textContent=sending?'Submitting…':expected?'Starting…':key==='data'?(replayData?'Replay data update →':'Add data + run →'):pendingCount>1?'Run selected changes →':'Run from '+names[key]+' →';$('run').title=cloudBlocked?data.session.message:'Run from '+$('selection-title').textContent+' and update its dependent stages on GitHub Actions';$('invalid').hidden=key!=='data'||!data.database_connected;$('invalid').disabled=busy||!!stale;
  $('record-dot').className=$('live-dot').className;$('verified').textContent=time(data.source?.last_success);$('message').className='';

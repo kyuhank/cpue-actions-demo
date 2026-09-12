@@ -186,6 +186,20 @@
 .stage.using-saved[data-key=synthesis] .source-link,.stage.using-saved[data-key=cpue_summary] .source-link{bottom:21px}
 .stage.using-saved[data-key=report]{padding-bottom:25px}
 .stage.using-saved[data-key=synthesis]{padding-bottom:25px}.stage.using-saved[data-key=synthesis] .source-link{bottom:5px}
+/* Every data job has a readable status alongside its icon. */
+.submission-node,.ingest-node{padding:4px 5px}
+.data-status{display:flex;align-items:center;gap:4px;font-size:10px;line-height:12px;font-weight:normal;margin-top:2px;color:inherit;text-align:left}
+.submission-node small.data-status{display:flex;margin-top:2px}
+.data-status .status-symbol{width:11px;height:11px;margin:0}
+.ingest-label strong{display:block;font-size:inherit;font-weight:normal}
+.quality-gate .node-control{flex-direction:column;align-items:flex-start;gap:1px;padding-left:2px}
+.quality-gate small{display:flex;align-items:center;line-height:12px}
+.quality-gate .status-symbol{width:11px;height:11px}
+.quality-gate .source-link{top:3px;bottom:auto}
+.data-node .qc{display:flex;align-items:center;gap:4px;font-size:11px;line-height:14px;margin-top:5px;text-align:left;color:#5c7e70}
+.data-node .qc .status-symbol{width:12px;height:12px;margin:0}
+.data-node .record-lines,.data-node .record-keys{display:none}
+.submission-node.running .data-status,.ingest-node.running .data-status{color:#946012}
 /* The operation is the headline; technical details stay in the expandable record. */
 main{padding-top:12px}.top{height:22px}
 .record{--record-accent:#38647e;--record-wash:#f0f5f9;display:flex;align-items:center;gap:12px;min-height:58px;margin-top:7px;padding:8px 12px;border:1px solid #d6e2e9;border-radius:9px;background:linear-gradient(105deg,var(--record-wash),#fff 80%);box-shadow:0 2px 8px #133b5210}

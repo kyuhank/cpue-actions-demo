@@ -15,6 +15,12 @@ import stage_barrier as gate
 assert {'cpue_vessel','cpue_year'} <= set(gate.predecessors('prepare_vessel'))
 assert {'prepare_vessel','prepare_year','cpue_summary'} <= set(gate.predecessors('assessment_vessel_ref'))
 assert 'cpue_report' in gate.predecessors('synthesis')
+from wait_intake import ready
+assert ready([{'name':'[qc]','conclusion':'success'}],['qc'])
+assert not ready([{'name':'[qc]','conclusion':None}],['qc'])
+try:ready([{'name':'[qc]','conclusion':'failure'}],['qc'])
+except RuntimeError:pass
+else:raise AssertionError('Failed QC must block loading')
 with tempfile.TemporaryDirectory() as tmp:
  root=Path(tmp)
  for key in gate.predecessors('prepare_vessel'):

@@ -85,3 +85,16 @@
 .record[data-phase=running],.record[data-phase=correction]{background:#fff5e1;border-left-color:#bc8831}
 .record[data-phase=failed]{background:#fff0e9;border-left-color:#be593d}
 .record[data-phase=complete]{background:#eef7f1;border-left-color:#25856e}
+
+/* Keep the current execution visually distinct from its dependency context. */
+.chain.executing .edges>path:not(.active):not(.returning){stroke:#9bafba;stroke-width:1;opacity:.3;animation:none}
+.chain.executing .edges>path.active{stroke:#bc8831;stroke-width:2.8;opacity:1}
+.chain.executing .edges>path.returning{stroke:#be593d;stroke-width:2.6;opacity:1}
+.chain.executing .edge-label{opacity:.4}
+.chain.executing .stage:not(.running):not(.failed),.chain.executing .submission-node:not(.running):not(.needs-correction),.chain.executing .quality-gate:not(.running):not(.failed),.chain.executing .ingest-node:not(.running):not(.failed){opacity:.48;border-width:1px;box-shadow:none}
+.chain.executing .stage.blocked small{color:#6a8190}
+.chain.executing .data-node{opacity:.48;box-shadow:none}
+.chain.executing .database-body,.chain.executing .database-shape ellipse{stroke-width:1;stroke-dasharray:4 3}
+.chain .edges>path.return-history{opacity:.22;stroke-width:1;animation:none}
+.chain .submission-node.running{opacity:1;box-shadow:0 0 0 3px #c58a2020;border-color:#bc8831;background:#fff3d9}
+.chain .submission-node.running strong{color:#946316}

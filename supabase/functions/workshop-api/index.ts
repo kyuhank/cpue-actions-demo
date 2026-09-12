@@ -1,4 +1,4 @@
-import {acceptIntake} from './intake.ts';
+import {acceptIntake,IntakePending} from './intake.ts';
 import {parseSelection,branchUpdates,runBranches,changeBranch,branches,change,changeable,current,consoleLines,stageLog,output,outputStage,outputNames,stageOutputs,ensureBranch,dispatch,outputKeys} from './github.ts';
 import {rpc,cached,invalidate} from './database.ts';
 import {maintain,observe,pendingUpdate} from './lifecycle.ts';
@@ -7,8 +7,7 @@ const cors={'Access-Control-Allow-Origin':'*','Access-Control-Allow-Methods':'GE
 const reply=(value:unknown,status=200)=>Response.json(value,{status,headers:cors});
 const enabled=()=>/^github_pat_[A-Za-z0-9_]+$/.test(Deno.env.get('WORKSHOP_GITHUB_TOKEN')||'')&&Deno.env.get('WORKSHOP_ZERO_BUDGET_CONFIRMED')==='true';
 async function status(){
- const s:any=await cached('status',Deno.env.get('WORKSHOP_GITHUB_TOKEN')?2:300,current),limits=await rpc('workshop_state');
- const database=await cached('database:current',10,()=>rpc('cpue_snapshot',{p_version:null}));
+ const [s,limits,database]:any[]=await Promise.all([cached('status',Deno.env.get('WORKSHOP_GITHUB_TOKEN')?1:300,current),rpc('workshop_state'),cached('database:current',10,()=>rpc('cpue_snapshot',{p_version:null}))]);
  const pending=pendingUpdate(limits,s),demo=enabled()?await observe(s,limits):await rpc('workshop_demo_state');
  const can=enabled()&&demo.phase!=='cleaning'&&!pending&&limits.remaining>0&&(!limits.next_update||Date.parse(limits.next_update)<=Date.now())&&s.status==='completed';
  const record=limits.last_request;let intake:{quality_check:any,published:boolean,checked_at:number,first_quality_check?:any,correction?:any}|null=record?.result?.quality_check?{quality_check:record.result.quality_check,published:record.result.published,checked_at:Date.parse(record.created_at)/1000}:null;
@@ -31,7 +30,7 @@ export async function handle(request:Request){
  try{
   if(path==='/api/accept-intake'){
    if(request.method!=='POST'||!enabled())return reply({detail:'Forbidden'},403);
-   try{return reply(await acceptIntake(request));}catch{return reply({detail:'The active, checked intake run could not be verified.'},403);}
+   try{return reply(await acceptIntake(request));}catch(e){console.error('Intake verification failed:',e instanceof Error?e.message:'Unknown verification error');return reply({detail:'The active, checked intake run could not be verified.'},e instanceof IntakePending?503:403);}
   }
   if(path==='/api/maintenance'){
    const key=Deno.env.get('WORKSHOP_WEBHOOK_SECRET');

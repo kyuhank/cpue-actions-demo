@@ -63,7 +63,7 @@ def restore(content, artifact, key, attempt, root):
         raise ValueError('Parent output checksum does not match')
 
 
-def wait_for_group(key, root=Path('.'), timeout=180, interval=2):
+def wait_for_group(key, root=Path('.'), timeout=180, interval=1):
     env = {k: v for k, v in os.environ.items() if k not in ('GH_DEBUG', 'DEBUG')}
     repo, run, attempt = (env.get(k, '') for k in
                           ('GITHUB_REPOSITORY', 'GITHUB_RUN_ID', 'GITHUB_RUN_ATTEMPT'))
@@ -94,6 +94,11 @@ def wait_for_group(key, root=Path('.'), timeout=180, interval=2):
         if time.monotonic() >= deadline:
             raise TimeoutError('Previous stage group did not finish: ' + ', '.join(pending))
         time.sleep(interval)
+    # Wait for every sibling, but transfer only the files this job consumes.
+    # The final report also archives the complete execution record.
+    from workflow_plan import PARENTS
+    needed = set(required if key == 'report' else PARENTS[key])
+    fresh = [stage for stage in fresh if stage in needed]
     if fresh:
         artifacts = json.loads(request(route + '/artifacts?per_page=100', env))['artifacts']
         def download(stage):

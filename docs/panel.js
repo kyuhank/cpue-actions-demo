@@ -126,7 +126,7 @@ function roundedRoute(points,radius=6){
  return d+`L${clean.at(-1).join(',')}`;
 }
 function qualityStatus(){
- const actual=data?.intake_stages?.find(j=>j.key==='qc');if(actual&&!actual.skipped)return ['returned','resubmitting'].includes(actual.correction_phase)?'failed':actual.status;
+ const actual=data?.intake_stages?.find(j=>j.key==='qc');if(actual&&!actual.skipped)return actual.correction_phase==='corrected'?'completed':['returned','resubmitting'].includes(actual.correction_phase)?'failed':actual.status;
  const q=data?.data_intake?.quality_check;
  return sending&&changeKind==='data'?'running':q?(q.accepted?'completed':'failed'):'waiting';
 }
@@ -147,12 +147,15 @@ function drawQuality(){
 
  const actualIngest=data.intake_stages?.find(j=>j.key==='ingest');
  const actualSubmission=data.intake_stages?.find(j=>j.key==='submission');
- submission.dataset.status=actualSubmission?.status||'waiting';submission.classList.toggle('running',actualSubmission?.status==='running');
+ const phase=data.intake_stages?.find(j=>j.key==='qc')?.correction_phase;
+ submission.dataset.status=phase==='resubmitting'?'running':actualSubmission?.status||'waiting';submission.classList.toggle('running',submission.dataset.status==='running');
+ submission.querySelector('strong').textContent=phase==='resubmitting'?'Resubmitting…':'Data submission';
  ingest.onclick=()=>{selected='data';dataDraft='new';draw();showPreview('ingest');};
  let label=ingest.querySelector('.ingest-label');if(!label){label=document.createElement('span');label.className='ingest-label';ingest.replaceChildren(label);}label.textContent=(actualIngest&&!actualIngest.skipped?(icons[actualIngest.status]||'·')+' ':'')+'Prepare & load';
- const state=qualityStatus();ingest.className='ingest-node '+(actualIngest?.status||(state==='failed'?'blocked':state==='completed'&&data.data_intake?.published?'completed':'waiting'));submission.classList.toggle('needs-correction',state==='failed');
- const stamp=data?.data_intake?.checked_at;if(state==='failed'&&stamp&&stamp!==qualityAlertStamp){qualityAlertStamp=stamp;notice('QC returned the submission: '+(data.data_intake.quality_check.errors?.[0]?.message||'Correct the flagged records.')+' The corrected example is resubmitted automatically.');}
+ const state=qualityStatus();ingest.className='ingest-node '+(actualIngest?.status||(state==='failed'?'blocked':state==='completed'&&data.data_intake?.published?'completed':'waiting'));submission.classList.toggle('needs-correction',state==='failed'&&phase!=='resubmitting');
+ const stamp=data?.data_intake?.checked_at;if(state==='failed'&&!phase&&stamp&&stamp!==qualityAlertStamp){qualityAlertStamp=stamp;notice('QC returned the submission: '+(data.data_intake.quality_check.errors?.[0]?.message||'Correct the flagged records.')+' The corrected example is resubmitted automatically.');}
  gate.className='quality-gate '+state;gate.querySelector('small').textContent={completed:'✓ Pass',failed:'× Fail',running:'Check…',waiting:'Ready'}[state];
+ if(phase==='rechecking')gate.querySelector('small').textContent='Recheck…';
  gate.style.transform='translateY(-83px)';
  gate.title='View the data quality check';
  if(!ingest.querySelector('.source-link')){const link=document.createElement('a');link.className='source-link';link.textContent='↗';link.onclick=e=>{e.preventDefault();e.stopPropagation();openSource('ingest');};ingest.append(link);}sourceLink('ingest');ingest.onmouseenter=()=>showPreview('ingest');ingest.onmouseleave=hidePreview;
@@ -170,7 +173,7 @@ function links(){
  const impact=affected(),rect=root.getBoundingClientRect(),ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg');
  const failedQC=qualityStatus()==='failed',failedIntake=failedQC&&(!selected||(selected==='data'&&(!dataDraft||dataDraft==='new')));
  if(selected==='data'){impact.add('data');if(!dataDraft||dataDraft==='new'){impact.add('submission');impact.add('qc');impact.add('ingest');}}
- const stages=new Map(data.stages.map(s=>[s.key,s]));stages.set('qc',{status:qualityStatus()});
+ const stages=new Map([...data.stages,...(data.intake_stages||[])].map(s=>[s.key,s]));stages.set('qc',{...stages.get('qc'),status:qualityStatus()});
  svg.classList.add('edges');svg.setAttribute('viewBox',`0 0 ${rect.width} ${rect.height}`);
  const defs=document.createElementNS(ns,'defs');
  for(const [id,color] of Object.entries({base:'#657f91',muted:'#9bb0bc',selected:'#0085ca',active:'#b77b1c',failed:'#be593d',corrected:'#25856e'})){
@@ -182,7 +185,7 @@ function links(){
   const band=document.createElementNS(ns,'rect');band.dataset.module=first;for(const [k,v] of Object.entries({x:a.left-rect.left-4,y:-17,width:b.right-a.left+8,height:rect.height+29,rx:9,fill,stroke,'stroke-width':1}))band.setAttribute(k,v);svg.append(band);
  }
 
- const all=[{key:'qc',parents:['submission'],status:qualityStatus()},{key:'ingest',parents:['qc']},{key:'data',parents:['ingest']},...data.stages.map(s=>s.key==='extract'?{...s,parents:['data']}:s)];
+ const all=[{key:'qc',parents:['submission'],status:qualityStatus()},{key:'ingest',parents:['qc'],status:stages.get('ingest')?.status},{key:'data',parents:['ingest']},...data.stages.map(s=>s.key==='extract'?{...s,parents:['data']}:s)];
  for(const child of all.filter(s=>!['cpue_summary','cpue_report'].includes(s.key)))for(const parent of child.parents||[]){
   const a=root.querySelector(`[data-key="${parent}"]`)?.getBoundingClientRect(),b=root.querySelector(`[data-key="${child.key}"]`)?.getBoundingClientRect();if(!a||!b)continue;
   const inPath=impact.has(child.key)&&impact.has(parent),reusedInput=child.reused||stages.get(parent)?.reused;
@@ -220,14 +223,16 @@ function links(){
   const a=source.getBoundingClientRect(),b=target.getBoundingClientRect();let points;
   if(isAnalysis){const top=from==='cpue_vessel',x=a.right-rect.left+1,y=(top?a.bottom-9:a.top+9)-rect.top,X=b.left-rect.left-4,Y=b.top+b.height*(top?.35:.7)-rect.top,m=(x+X)/2;points=[[x,y],[m,y],[m,Y],[X,Y]];}
   else{const x=a.left+a.width/2-rect.left;points=[[x,a.bottom-rect.top+1],[x,b.top-rect.top-3]];}
-  const path=document.createElementNS(ns,'path');path.dataset.from=from;path.dataset.to=to;path.classList.add('product-edge');path.classList.toggle('muted',muted);path.classList.toggle('preview',!!selected&&!muted);
-  path.setAttribute('d',roundedRoute(points,5));path.setAttribute('marker-end','url(#arrow-'+(muted?'muted':selected?'selected':'base')+')');svg.append(path);
+  const path=document.createElementNS(ns,'path');path.dataset.from=from;path.dataset.to=to;path.classList.add('product-edge');
+  const running=!expected&&!sending&&!muted&&!stages.get(from)?.reused&&stages.get(to)?.status==='running';path.classList.toggle('active',running);path.classList.toggle('muted',muted);path.classList.toggle('preview',!!selected&&!muted);
+  path.setAttribute('d',roundedRoute(points,5));path.setAttribute('marker-end','url(#arrow-'+(running?'active':muted?'muted':selected?'selected':'base')+')');svg.append(path);
  }
  const correction=data.intake_stages?.find(j=>j.key==='qc')?.correction_phase;
  if(failedQC||correction){
   const a=$('quality-gate').getBoundingClientRect(),b=$('submission-node').getBoundingClientRect(),x=a.right-rect.left+1,y=a.top+a.height/2-rect.top,X=b.right-rect.left+4,Y=b.top+b.height/2-rect.top,rail=X+12;
-  const returned=document.createElementNS(ns,'path');returned.classList.add('return-edge');returned.classList.toggle('corrected-return',correction==='corrected');returned.classList.toggle('muted',!!selected&&!impact.has('data'));returned.dataset.from='qc';returned.dataset.to='submission';returned.setAttribute('d',roundedRoute([[x,y],[rail,y],[rail,Y],[X,Y]]));returned.setAttribute('marker-end','url(#arrow-'+(correction==='corrected'?'corrected':'failed')+')');const label=document.createElementNS(ns,'title');label.textContent=correction==='corrected'?'Initial QC failed; corrected example resubmitted; recheck passed.':'QC returned the example for correction and resubmission.';returned.append(label);svg.append(returned);
+  const returned=document.createElementNS(ns,'path');returned.classList.add('return-edge');returned.classList.toggle('corrected-return',correction==='corrected');returned.classList.toggle('returning',correction==='returned');returned.classList.toggle('active',correction==='resubmitting');returned.classList.toggle('return-history',['rechecking','corrected'].includes(correction));returned.classList.toggle('muted',!!selected&&!impact.has('data'));returned.dataset.from='qc';returned.dataset.to='submission';returned.setAttribute('d',roundedRoute([[x,y],[rail,y],[rail,Y],[X,Y]]));returned.setAttribute('marker-end','url(#arrow-'+(correction==='resubmitting'?'active':correction==='corrected'?'corrected':'failed')+')');const label=document.createElementNS(ns,'title');label.textContent=correction==='corrected'?'Initial QC failed; corrected example resubmitted; recheck passed.':'QC returned the example for correction and resubmission.';returned.append(label);svg.append(returned);
  }
+ if(root.classList.contains('executing'))for(const path of svg.querySelectorAll(':scope > path:not(.active):not(.returning)'))if(path.hasAttribute('marker-end'))path.setAttribute('marker-end','url(#arrow-muted)');
  root.append(svg);
 }
 new ResizeObserver(()=>requestAnimationFrame(()=>{links();if(previewKey)showPreview(previewKey);if($('sql-view').open)placePopup($('sql-view'),node('extract'));})).observe($('chain'));
@@ -236,6 +241,7 @@ function showConsole(){const space=document.querySelector('main').getBoundingCli
 async function loadConsole(){if(data.has_run===false||consolePending||data.status!=='completed'||(consoleRecord?.run_id===data.run_id&&consoleRecord?.attempt===data.attempt))return;consolePending=true;try{const r=await fetch('/api/console',{cache:'no-store'});if(r.ok){const next=await r.json();if(next.ready&&next.lines.length)consoleRecord=next;}}catch{}finally{consolePending=false;showConsole();}}
 function notice(text){$('notice-text').textContent=text;$('notice').hidden=false;}
 function draw(){if(!data)return;const impact=affected(),key=selectedKey(),steps=(data.execution?.jobs||[]).flatMap(j=>j.steps||[]),active=steps.find(s=>s.status==='in_progress'),reused=data.stages.filter(s=>s.reused).length,busy=sending||!!expected||data.status!=='completed',stale=data.source?.stale,cloudBlocked=data.session&&!data.session.can_update;
+ $('chain').classList.toggle('executing',busy);
  $('run-link').textContent=data.has_run===false?'Ready':'Run #'+data.number;$('run-link').href=data.run_url;$('run-state').textContent=data.demo?.phase==='cleaning'?'Resetting…':data.has_run===false?'Ready for a fresh demonstration':stale?'Last verified state':expected?'New run pending':data.status==='completed'?(data.conclusion==='success'?'Complete · '+(data.stages.length-reused+(data.intake_stages||[]).filter(j=>!j.skipped).length)+' run · '+reused+' reused':data.conclusion):data.stages.filter(s=>s.status==='running').length>1?data.stages.filter(s=>s.status==='running').length+' analyses running in parallel':data.status.replaceAll('_',' ');$('live-dot').className='dot '+(busy?'live':data.conclusion==='success'?'success':'');
  const source=node('data'),dataImpacted=selected==='data'||impact.has('data'),dataRetained=!!data.has_run&&(data.intake_stages? !data.intake_stages.some(j=>j.key==='ingest'&&!j.skipped&&j.status!=='not_requested'):data.stages.some(j=>j.key==='extract'&&j.reused));
  source.classList.toggle('impacted',!!selected&&dataImpacted);source.classList.toggle('outside-impact',!!selected&&!dataImpacted);source.classList.toggle('reused',!dataImpacted&&(!!selected||dataRetained));source.classList.toggle('selected',selected==='data');source.querySelector('.node-control').setAttribute('aria-pressed',String(selected==='data'));const qc=data.data_intake?.quality_check,version=(data.intake_stages?.some(j=>j.key==='submission'&&!j.skipped)&&!data.intake_stages?.some(j=>j.key==='ingest'&&j.status==='completed')?data.latest_database_version:data.database_version)||(data.data_intake?.published?qc?.proposed_version:null);source.querySelector('.release').textContent=version?'v'+version:'Versioned data';source.querySelector('.qc').textContent=sending&&changeKind==='data'?'Checking QC…':qc?(qc.accepted?'✓ QC passed':'× QC failed'):'QC before release';if(Number(version)>=2024&&(!qc||qc.accepted))source.querySelector('.qc').textContent='✓ One added batch';source.querySelector('.qc').classList.toggle('failed',!!qc&&!qc.accepted);
@@ -270,15 +276,16 @@ function narrate(){
  let message;
  if(sending)message=changeKind==='data'?'Submitting the example and requesting quality checks.':'Saving the selected versions and preparing the dependent jobs.';
  else if(expected)message='Update accepted. Preparing the selected workflow.';
- else if(['returned','resubmitting'].includes(phase)){message='QC failed → correcting the example → resubmitting automatically.';record.dataset.phase='correction';}
+ else if(phase==='returned'){message='QC failed: one record has zero hooks. Returning the submission for correction.';record.dataset.phase='correction';}
+ else if(phase==='resubmitting'){message='Resubmitting automatically: the example record is corrected and sent back to QC.';record.dataset.phase='correction';}
  else if(phase==='rechecking'){message='Corrected records resubmitted → checking them again.';record.dataset.phase='correction';}
- else if(intake)message=labels[intake.key];
+ else if(intake)message=intake.key==='qc'&&phase==='corrected'?'QC passed on the second check. Saving the accepted submission.':labels[intake.key];
  else if(running.length>1){const cpue=running.filter(s=>['cpue_vessel','cpue_year'].includes(s.key)).length,assess=running.filter(s=>s.key.startsWith('assessment_')).length;message=cpue>1?'Running the two CPUE analyses in parallel.':assess>1?'Running '+assess+' assessment models in parallel.':running.length+' independent jobs are running; dependent jobs wait for their inputs.';}
  else if(running.length){const key=running[0].key;message=labels[key]||(key.startsWith('assessment_')?'Fitting '+names[key].toLowerCase()+' using CPUE '+(key.includes('vessel')?'A':'B')+'.':'Running the selected analysis.');}
  else if(data.has_run===false)message='Select a starting stage. Run it and its dependent jobs.';
- else if(data.status!=='completed')message=phase==='corrected'?'QC failed → resubmitted → passed. Preparing the analyses with the accepted data.':data.stages.some(s=>s.status==='completed'&&!s.reused)?'Results saved. Preparing the next dependent jobs.':'Preparing code, software and the selected data version.';
+ else if(data.status!=='completed')message=data.stages.some(s=>s.status==='completed'&&!s.reused)?'Results saved. Passing verified outputs to the next jobs.':phase==='corrected'?'QC passed. Preparing the analyses with the accepted data.':'Preparing code, software and the selected data version.';
  else if(data.conclusion==='success'){const ran=data.stages.filter(s=>!s.reused).length+(data.intake_stages||[]).filter(s=>!s.skipped).length;message=phase==='corrected'?'QC failed → corrected → passed. '+ran+' jobs completed. Open a job to inspect its outputs.':ran+' jobs completed. Open a job to inspect its outputs.';}
- else{message='The workflow stopped. Open the failed job to inspect the reason.';record.dataset.phase='failed';}
+ else{const failed=[...(data.intake_stages||[]),...data.stages].find(s=>s.status==='failed');message=(failed?({submission:'Data submission',qc:'QC',ingest:'Prepare & load'}[failed.key]||names[failed.key])+' stopped. ':'The workflow stopped. ')+'Open its job record to inspect the reason.';record.dataset.phase='failed';}
  if(message)$('message').textContent=message;
  if(data.demo?.reset_at&&data.status==='completed'){const sec=Math.max(0,Math.ceil((Date.parse(data.demo.reset_at)-Date.now())/1000));$('verified').textContent='Resets in '+Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');}
 }

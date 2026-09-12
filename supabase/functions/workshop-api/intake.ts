@@ -1,6 +1,7 @@
 import {json,REPO,DEMO_BRANCH} from './github.ts';
 import {rpc,cached,invalidate} from './database.ts';
 import batches from './batches.json' with {type:'json'};
+export class IntakePending extends Error {}
 const issuer='https://token.actions.githubusercontent.com';
 const bytes=(s:string)=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
 export function validateClaims(c:any,now=Date.now()/1000){
@@ -29,10 +30,10 @@ export async function acceptIntake(request:Request){
  const pin=atob(workflow.content.replace(/\s/g,'')).match(/toy-pipeline\.yml@([a-f0-9]{40})/)?.[1];
  if(!pin||claims.job_workflow_ref!==`kyuhank/cpue-actions-demo/.github/workflows/toy-pipeline.yml@${pin}`||claims.job_workflow_sha!==pin)throw Error('Unregistered intake workflow.');
  const jobs=(await json(`actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`)).jobs;
- if(!['submission','qc'].every(k=>jobs.some((j:any)=>j.name.includes('['+k+']')&&j.conclusion==='success'))||!jobs.some((j:any)=>j.name.includes('[ingest]')&&j.status==='in_progress'))throw Error('Submission and QC must pass before loading.');
+ if(!['submission','qc'].every(k=>jobs.some((j:any)=>j.name.includes('['+k+']')&&j.conclusion==='success'))||!jobs.some((j:any)=>j.name.includes('[ingest]')&&j.status==='in_progress'))throw new IntakePending('Submission and QC must pass before loading.');
  if(record.result.intake_mode==='invalid'){
   const qc=jobs.find((j:any)=>j.name.includes('[qc]'));
-  if(!['Correct and resubmit example','Recheck corrected submission'].every(name=>qc?.steps?.some((step:any)=>step.name===name&&step.conclusion==='success')))throw Error('The corrected example must be resubmitted and checked.');
+  if(!['Correct and resubmit example','Recheck corrected submission'].every(name=>qc?.steps?.some((step:any)=>step.name===name&&step.conclusion==='success')))throw new IntakePending('The corrected example must be resubmitted and checked.');
  }
  const batch=(batches as any)['2024'];
  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(batch))))).map(x=>x.toString(16).padStart(2,'0')).join('');

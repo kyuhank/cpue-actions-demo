@@ -53,7 +53,9 @@ if key in ('cpue_summary','cpue_report'):
     target.write_text(json.dumps(manifest,indent=2)+'\n')
     if key=='cpue_report':
         runpy.run_path(str(ROOT/'pipeline'/code_source.get('entrypoint',stage+'.py')),run_name='__main__')
-if key not in ('report','cpue_report'):
+if key in ('report','cpue_report'):
+    runpy.run_path(str(ROOT / 'pipeline/stage_html.py'))['finish_report'](key, work / 'outputs')
+else:
     runpy.run_path(str(ROOT / 'pipeline/stage_html.py'))['build'](key, work / 'outputs', code_source)
 compute_seconds = time.perf_counter() - started
 record = {'stage': key, 'fingerprint': plan['stages'][key]['fingerprint'] if plan else fingerprints()[key],

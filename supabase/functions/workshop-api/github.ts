@@ -58,10 +58,17 @@ export function mapRun(run:any,jobs:any[]){
  const qcSteps=jobs.find(j=>j.name?.includes('[qc]'))?.steps||[];
  const correction=qcSteps.find((s:any)=>s.name==='Correct and resubmit example'),recheck=qcSteps.find((s:any)=>s.name==='Recheck corrected submission');
  const initial=qcSteps.find((s:any)=>s.name==='QC submitted records');
- const returned=initial?.conclusion==='failure'&&(!correction||['pending','queued'].includes(correction.status));
+ const returnStep=qcSteps.find((s:any)=>s.name==='Return failed submission');
+ const returned=returnStep?.status==='in_progress'||initial?.conclusion==='failure'&&(!correction||['pending','queued'].includes(correction.status));
  const correcting=correction&&correction.status==='in_progress';
  const rechecking=correction?.conclusion==='success'&&recheck?.conclusion!=='success';
- const intake_stages=[['submission',[]],['qc',['submission']],['ingest',['qc']]].map(([key,parents])=>{const job=jobs.find(j=>j.name?.includes('['+key+']'));return {key,parents,correction_phase:key==='qc'?(returned?'returned':correcting?'resubmitting':rechecking?'rechecking':recheck?.conclusion==='success'?'corrected':null):null,status:job?.status==='in_progress'?'running':job?.conclusion==='success'?'completed':job?.conclusion==='failure'?'failed':job?.conclusion==='skipped'?(jobs.some(j=>j.name?.includes('[submission]')&&j.conclusion==='skipped')?'not_requested':'blocked'):'waiting',skipped:job?.conclusion==='skipped',source_id:`${run.id}-${run.run_attempt}-${key}`,_job_id:job?.id,html_url:job?.html_url};});
+ const intake_stages=[['submission',[]],['qc',['submission']],['ingest',['qc']]].map(([key,parents])=>{
+  const job=jobs.find(j=>j.name?.includes('['+key+']'));
+  let status=job?.status==='in_progress'?'running':job?.conclusion==='success'?'completed':job?.conclusion==='failure'?'failed':job?.conclusion==='skipped'?(jobs.some(j=>j.name?.includes('[submission]')&&j.conclusion==='skipped')?'not_requested':'blocked'):'waiting';
+  const barrier=job?.steps?.find((s:any)=>s.name==='Wait for accepted upstream records');
+  if(status==='running'&&barrier?.conclusion!=='success'&&barrier)status='waiting';
+  return {key,parents,correction_phase:key==='qc'?(returned?'returned':correcting?'resubmitting':rechecking?'rechecking':recheck?.conclusion==='success'?'corrected':null):null,status,skipped:job?.conclusion==='skipped',source_id:`${run.id}-${run.run_attempt}-${key}`,_job_id:job?.id,html_url:job?.html_url};
+ });
  return {ready:true,has_run:true,stages,intake_stages,run_id:run.id,number:run.run_number,attempt:run.run_attempt,run_url:run.html_url,commit:run.head_sha,status:run.status,conclusion:run.conclusion,branch:run.head_branch,
  trigger_message:run.display_title.startsWith('Database version ')?run.display_title:(run.head_commit?.message||run.display_title).split('\n')[0].slice(0,160),database_version:/^Database version 20\d{2}$/.test(run.display_title)?Number(run.display_title.slice(-4)):null,
  execution:{mode:distributed?'module_jobs':'steps',job_count:jobs.length,jobs},source:{stale:false,last_success:new Date().toISOString()},created_at:run.created_at,completed_at:run.status==='completed'?run.updated_at:null};

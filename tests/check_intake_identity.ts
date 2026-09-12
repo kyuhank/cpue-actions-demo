@@ -26,3 +26,16 @@ Deno.test('QC return and recheck reflect actual GitHub steps in one workflow',()
  assert(phase()==='rechecking');
  Object.assign(steps[2],{status:'completed',conclusion:'success'});assert(phase()==='corrected');
 });
+
+Deno.test('A continued QC error is visible through its return step; warm intake waits',()=>{
+ const run={id:123,run_attempt:1,status:'in_progress',display_title:'Demo'};
+ const jobs=[{name:'[qc]',status:'in_progress',steps:[
+ {name:'QC submitted records',status:'completed',conclusion:'success'},
+ {name:'Return failed submission',status:'in_progress'},
+ {name:'Correct and resubmit example',status:'pending'},
+ {name:'Recheck corrected submission',status:'pending'}]},
+ {name:'[ingest]',status:'in_progress',steps:[{name:'Wait for accepted upstream records',status:'in_progress'}]}];
+ const intake=mapRun(run,jobs).intake_stages;
+ assert(intake.find(s=>s.key==='qc')!.correction_phase==='returned');
+ assert(intake.find(s=>s.key==='ingest')!.status==='waiting');
+});

@@ -157,7 +157,32 @@
 @media(prefers-reduced-motion:reduce){.status-symbol.running{animation:none}}
 @media(max-width:1000px){.stage[data-key=extract]{padding-left:7px;padding-right:7px}.stage[data-key=extract] small{font-size:10.5px}.stage[data-key=extract] .status-symbol{width:11px;height:11px}}
 /* An unframed preview control leaves the title and connector ports clear. */
-.source-link{width:20px;height:18px;top:-12px;right:5px;border:0;border-radius:9px;background:inherit;color:var(--stage-ink,#417a67);opacity:.72}.source-link svg{width:16px;height:16px}.source-link{opacity:0;pointer-events:none;transition:opacity .15s}.stage:hover>.source-link,.stage:focus-within>.source-link,.stage.selected>.source-link,.data-node:hover>.source-link,.data-node:focus-within>.source-link,.data-node.selected>.source-link,.submission-node:hover>.source-link,.submission-node:focus-within>.source-link,.submission-node.selected>.source-link,.quality-gate:hover>.source-link,.quality-gate:focus-within>.source-link,.ingest-node:hover>.source-link,.ingest-node:focus-within>.source-link{opacity:.45;pointer-events:auto}.source-link:hover,.source-link:focus-visible{opacity:1;background:#fff;color:#0085ca}
+.source-link{width:20px;height:18px;top:-12px;right:5px;border:0;border-radius:9px;background:inherit;color:var(--stage-ink,#417a67);opacity:.72}.source-link svg{width:16px;height:16px}.source-link{opacity:0;pointer-events:none;transition:opacity .15s}.stage:hover>.source-link,.stage:focus-within>.source-link,.stage.selected>.source-link,.data-node:hover>.source-link,.data-node:focus-within>.source-link,.data-node.selected>.source-link,.submission-node:hover>.source-link,.submission-node:focus-within>.source-link,.submission-node.selected>.source-link,.quality-gate:hover>.source-link,.quality-gate:focus-within>.source-link,.ingest-node:hover>.source-link,.ingest-node:focus-within>.source-link{opacity:.65;pointer-events:auto}.source-link:hover,.source-link:focus-visible{opacity:1;background:#fff;color:#0085ca}
 .submission-node .source-link,.quality-gate .source-link,.ingest-node .source-link{width:16px;height:16px;top:-10px;right:4px}
 .data-node .source-link{top:0;right:5px}
 .submission-node .node-control{padding-right:0}
+/* Details stay inside each card, separate from the job title and status. */
+.source-link,.submission-node .source-link,.quality-gate .source-link,.ingest-node .source-link{top:auto;bottom:5px;right:6px;width:30px;height:15px;border:0;border-radius:3px;padding:0;background:none;font:10px/15px Arial,sans-serif;color:#637b89}
+.source-link:hover,.source-link:focus-visible{background:#e9f1f6;color:#007ebc}
+.stage{padding-bottom:25px}
+.stage[data-key^=cpue_]{height:auto;min-height:80px;padding-bottom:25px}
+.stage[data-key=cpue_summary]{height:88px;min-height:88px;padding-bottom:23px}
+.stage[data-key=cpue_report]{height:72px;min-height:72px;transform:translateY(54px)}
+.stage[data-key^=prepare_]{min-height:90px;padding-bottom:25px}
+.stage[data-key^=assessment_]{min-height:72px;padding-bottom:25px}
+.stage[data-key=synthesis],.stage[data-key=report]{padding-bottom:25px}
+.stage.using-saved{padding-bottom:8px}
+.stage.using-saved[data-key=cpue_report]{height:72px;min-height:72px}
+.submission-node{height:40px;padding:5px 5px 18px}
+.quality-gate{height:38px;padding:4px 4px 18px}
+.ingest-node{height:38px;padding:4px 3px 18px}
+.submission-node .source-link,.quality-gate .source-link,.ingest-node .source-link{font-size:9px;bottom:2px;right:5px;height:12px;line-height:12px}
+.data-node .source-link{top:47px;bottom:auto;right:7px;width:29px}
+.data-node .release{text-align:left;font-size:12px}
+.stage[data-key=cpue_summary]{height:80px;min-height:80px;transform:translateY(-34px);padding-top:6px;padding-bottom:18px}
+.stage[data-key=cpue_report],.stage.using-saved[data-key=cpue_report]{height:64px;min-height:64px;transform:translateY(44px);padding-top:7px;padding-bottom:20px}
+.stage.using-saved[data-key=cpue_report]{padding-bottom:6px}
+.quality-gate{width:84%}.quality-gate .node-control{display:flex;align-items:center;justify-content:center;gap:4px;white-space:nowrap}.quality-gate small{font-size:10px;margin:0}
+.stage.using-saved[data-key=synthesis] .source-link,.stage.using-saved[data-key=cpue_summary] .source-link{bottom:21px}
+.stage.using-saved[data-key=report]{padding-bottom:25px}
+.stage.using-saved[data-key=synthesis]{padding-bottom:25px}.stage.using-saved[data-key=synthesis] .source-link{bottom:5px}

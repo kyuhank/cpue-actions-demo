@@ -55,7 +55,7 @@ function statusSymbol(state){
 }
 function previewControl(key){
  const button=document.createElement('button');button.type='button';button.className='source-link';
- button.innerHTML='<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M2 10c2-3.3 4.7-5 8-5s6 1.7 8 5c-2 3.3-4.7 5-8 5s-6-1.7-8-5Z"/><circle cx="10" cy="10" r="2.2"/></svg>';
+ button.textContent='View ›';
  button.title='Preview '+names[key];button.setAttribute('aria-label',button.title);
  button.onclick=e=>{e.preventDefault();e.stopPropagation();showPreview(key);};return button;
 }

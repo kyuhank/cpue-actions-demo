@@ -5,7 +5,7 @@ import subprocess, tarfile
 ROOT=Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 (ROOT/'config').mkdir(exist_ok=True)
-(ROOT/'config/stages.json').write_text(json.dumps({'extract':{'revision':'runner-comparison'}}))
+(ROOT/'config/stages.json').write_text(json.dumps({'extract':{'revision':1}}))
 (ROOT/'config/modules.json').write_text('{}')
 subprocess.run(['python3','scripts/resolve_modules.py'],check=True)
 subprocess.run(['python3','scripts/workflow_plan.py'],check=True)
